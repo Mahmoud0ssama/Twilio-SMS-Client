@@ -31,6 +31,16 @@
         @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
+<%!
+    private String esc(Object o) {
+        if (o == null) return "";
+        return o.toString()
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+%>
 <body>
     <div class="auth-container">
         <div class="auth-card">
@@ -40,24 +50,38 @@
             </div>
 
             <% if (request.getAttribute("error") != null) { %>
-                <div class="message error"><%= request.getAttribute("error") %></div>
+                <div class="message error">
+                    <%= esc(request.getAttribute("error")) %>
+                </div>
             <% } %>
 
             <form action="register" method="post" class="auth-form">
+                <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
+
                 <div class="form-section">
                     <h2>Account</h2>
                     <div class="form-group">
                         <label for="username">Username</label>
-                        <input type="text" id="username" name="username" value="<%= request.getAttribute("username") != null ? request.getAttribute("username") : "" %>" placeholder="Choose a username" required autofocus>
+                        <input type="text" id="username" name="username"
+                            value="<%= esc(request.getAttribute("username")) %>"
+                            placeholder="Choose a username"
+                            autocomplete="username"
+                            required autofocus>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="password">Password</label>
-                            <input type="password" id="password" name="password" placeholder="Create a password" required>
+                            <input type="password" id="password" name="password"
+                                placeholder="Create a password"
+                                autocomplete="new-password"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="confirm_password">Confirm Password</label>
-                            <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm password" required>
+                            <input type="password" id="confirm_password" name="confirm_password"
+                                placeholder="Confirm password"
+                                autocomplete="new-password"
+                                required>
                         </div>
                     </div>
                 </div>
@@ -66,31 +90,54 @@
                     <h2>Profile</h2>
                     <div class="form-group">
                         <label for="full_name">Full Name</label>
-                        <input type="text" id="full_name" name="full_name" value="<%= request.getAttribute("full_name") != null ? request.getAttribute("full_name") : "" %>" placeholder="John Doe" required>
+                        <input type="text" id="full_name" name="full_name"
+                            value="<%= esc(request.getAttribute("full_name")) %>"
+                            placeholder="John Doe"
+                            autocomplete="name"
+                            required>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="birthday">Birthday</label>
-                            <input type="date" id="birthday" name="birthday" value="<%= request.getAttribute("birthday") != null ? request.getAttribute("birthday") : "" %>" required>
+                            <input type="date" id="birthday" name="birthday"
+                                value="<%= esc(request.getAttribute("birthday")) %>"
+                                autocomplete="bday"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="msisdn">Phone (MSISDN)</label>
-                            <input type="tel" id="msisdn" name="msisdn" value="<%= request.getAttribute("msisdn") != null ? request.getAttribute("msisdn") : "" %>" placeholder="+1234567890" required>
+                            <input type="tel" id="msisdn" name="msisdn"
+                                value="<%= esc(request.getAttribute("msisdn")) %>"
+                                placeholder="+1234567890"
+                                autocomplete="tel"
+                                required>
                         </div>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="job">Job</label>
-                            <input type="text" id="job" name="job" value="<%= request.getAttribute("job") != null ? request.getAttribute("job") : "" %>" placeholder="Software Engineer" required>
+                            <input type="text" id="job" name="job"
+                                value="<%= esc(request.getAttribute("job")) %>"
+                                placeholder="Software Engineer"
+                                autocomplete="organization-title"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="email">Email</label>
-                            <input type="email" id="email" name="email" value="<%= request.getAttribute("email") != null ? request.getAttribute("email") : "" %>" placeholder="you@example.com" required>
+                            <input type="email" id="email" name="email"
+                                value="<%= esc(request.getAttribute("email")) %>"
+                                placeholder="you@example.com"
+                                autocomplete="email"
+                                required>
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="address">Address</label>
-                        <input type="text" id="address" name="address" value="<%= request.getAttribute("address") != null ? request.getAttribute("address") : "" %>" placeholder="123 Main St, City, Country" required>
+                        <input type="text" id="address" name="address"
+                            value="<%= esc(request.getAttribute("address")) %>"
+                            placeholder="123 Main St, City, Country"
+                            autocomplete="street-address"
+                            required>
                     </div>
                 </div>
 
@@ -98,15 +145,26 @@
                     <h2>Twilio Credentials</h2>
                     <div class="form-group">
                         <label for="twilio_account_sid">Account SID</label>
-                        <input type="text" id="twilio_account_sid" name="twilio_account_sid" value="<%= request.getAttribute("twilio_account_sid") != null ? request.getAttribute("twilio_account_sid") : "" %>" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required>
+                        <input type="text" id="twilio_account_sid" name="twilio_account_sid"
+                            value="<%= esc(request.getAttribute("twilio_account_sid")) %>"
+                            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            autocomplete="off"
+                            required>
                     </div>
                     <div class="form-group">
                         <label for="twilio_auth_token">Auth Token</label>
-                        <input type="password" id="twilio_auth_token" name="twilio_auth_token" placeholder="Your Twilio auth token" required>
+                        <input type="password" id="twilio_auth_token" name="twilio_auth_token"
+                            placeholder="Your Twilio auth token"
+                            autocomplete="off"
+                            required>
                     </div>
                     <div class="form-group">
                         <label for="twilio_sender_id">Sender ID (From Number)</label>
-                        <input type="tel" id="twilio_sender_id" name="twilio_sender_id" value="<%= request.getAttribute("twilio_sender_id") != null ? request.getAttribute("twilio_sender_id") : "" %>" placeholder="+1234567890" required>
+                        <input type="tel" id="twilio_sender_id" name="twilio_sender_id"
+                            value="<%= esc(request.getAttribute("twilio_sender_id")) %>"
+                            placeholder="+1234567890"
+                            autocomplete="off"
+                            required>
                     </div>
                     <div class="message warning" style="font-size: 0.85rem; margin-bottom: 0;">
                         A verification code will be sent to your phone using these credentials.

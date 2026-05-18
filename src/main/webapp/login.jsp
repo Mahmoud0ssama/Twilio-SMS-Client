@@ -31,26 +31,39 @@
             </div>
 
             <% if (request.getAttribute("message") != null) { %>
-                <div class="message success"><%= request.getAttribute("message") %></div>
+                <div class="message success">
+                    <%= request.getAttribute("message").toString()
+                        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") %>
+                </div>
             <% } %>
             <% if (request.getAttribute("error") != null) { %>
-                <div class="message error"><%= request.getAttribute("error") %></div>
+                <div class="message error">
+                    <%= request.getAttribute("error").toString()
+                        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") %>
+                </div>
             <% } %>
 
             <form action="login" method="post" class="auth-form">
+                <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <input type="text" id="username" name="username" placeholder="Enter your username" required autofocus>
+                    <input type="text" id="username" name="username"
+                        placeholder="Enter your username"
+                        autocomplete="username"
+                        required autofocus>
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    <input type="password" id="password" name="password"
+                        placeholder="Enter your password"
+                        autocomplete="current-password"
+                        required>
                 </div>
                 <button type="submit">Sign In</button>
             </form>
 
             <div class="auth-footer">
-                <p>Don't have an account? <a href="register.jsp">Register</a></p>
+                <p>Don't have an account? <a href="register">Register</a></p>
             </div>
         </div>
     </div>

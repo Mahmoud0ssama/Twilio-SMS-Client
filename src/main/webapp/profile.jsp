@@ -21,6 +21,15 @@
         @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
+<%!
+    private String esc(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+%>
 <body>
     <div class="auth-container">
         <div class="auth-card">
@@ -30,24 +39,41 @@
             </div>
 
             <% if (request.getAttribute("errorMessage") != null) { %>
-                <div class="message error"><%= request.getAttribute("errorMessage") %></div>
+                <div class="message error">
+                    <%= esc(request.getAttribute("errorMessage").toString()) %>
+                </div>
             <% } %>
             <% if (request.getAttribute("successMessage") != null) { %>
-                <div class="message success"><%= request.getAttribute("successMessage") %></div>
+                <div class="message success">
+                    <%= esc(request.getAttribute("successMessage").toString()) %>
+                </div>
             <% } %>
 
-            <% Map<String, String> profile = (Map<String, String>) request.getAttribute("profile"); %>
+            <%
+                Map<String, String> profile = (Map<String, String>) request.getAttribute("profile");
+            %>
+
+            <% if (profile == null) { %>
+                <div class="message error">Failed to load profile. Please try again.</div>
+            <% } else { %>
 
             <form action="profile" method="post" class="auth-form">
+                <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
+
                 <div class="form-section">
                     <h2>Account</h2>
                     <div class="form-group">
                         <label for="username">Username (Cannot be changed)</label>
-                        <input type="text" id="username" value="<%= profile.get("username") %>" disabled>
+                        <input type="text" id="username"
+                            value="<%= esc(profile.get("username")) %>"
+                            autocomplete="username"
+                            disabled>
                     </div>
                     <div class="form-group">
                         <label for="password">New Password (Leave blank to keep current)</label>
-                        <input type="password" id="password" name="password" placeholder="Enter a new password">
+                        <input type="password" id="password" name="password"
+                            placeholder="Enter a new password"
+                            autocomplete="new-password">
                     </div>
                 </div>
 
@@ -55,31 +81,46 @@
                     <h2>Personal Details</h2>
                     <div class="form-group">
                         <label for="fullName">Full Name</label>
-                        <input type="text" id="fullName" name="fullName" value="<%= profile.get("fullName") %>" required>
+                        <input type="text" id="fullName" name="fullName"
+                            value="<%= esc(profile.get("fullName")) %>"
+                            required>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="birthday">Birthday</label>
-                            <input type="date" id="birthday" name="birthday" value="<%= profile.get("birthday") != null ? profile.get("birthday") : "" %>" required>
+                            <input type="date" id="birthday" name="birthday"
+                                value="<%= esc(profile.get("birthday")) %>"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="msisdn">Phone (MSISDN)</label>
-                            <input type="tel" id="msisdn" name="msisdn" value="<%= profile.get("msisdn") %>" required>
+                            <input type="tel" id="msisdn" name="msisdn"
+                                value="<%= esc(profile.get("msisdn")) %>"
+                                autocomplete="tel"
+                                required>
                         </div>
                     </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="job">Job</label>
-                            <input type="text" id="job" name="job" value="<%= profile.get("job") %>" required>
+                            <input type="text" id="job" name="job"
+                                value="<%= esc(profile.get("job")) %>"
+                                required>
                         </div>
                         <div class="form-group">
                             <label for="email">Email</label>
-                            <input type="email" id="email" name="email" value="<%= profile.get("email") %>" required>
+                            <input type="email" id="email" name="email"
+                                value="<%= esc(profile.get("email")) %>"
+                                autocomplete="email"
+                                required>
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="address">Address</label>
-                        <input type="text" id="address" name="address" value="<%= profile.get("address") %>" required>
+                        <input type="text" id="address" name="address"
+                            value="<%= esc(profile.get("address")) %>"
+                            autocomplete="street-address"
+                            required>
                     </div>
                 </div>
 
@@ -87,20 +128,30 @@
                     <h2>Twilio Credentials</h2>
                     <div class="form-group">
                         <label for="twilioSid">Account SID</label>
-                        <input type="text" id="twilioSid" name="twilioSid" value="<%= profile.get("twilioSid") %>" required>
+                        <input type="text" id="twilioSid" name="twilioSid"
+                            value="<%= esc(profile.get("twilioSid")) %>"
+                            autocomplete="off"
+                            required>
                     </div>
                     <div class="form-group">
-                        <label for="twilioToken">Auth Token</label>
-                        <input type="password" id="twilioToken" name="twilioToken" value="<%= profile.get("twilioToken") %>" required>
+                        <label for="twilioToken">Auth Token (Leave blank to keep current)</label>
+                        <input type="password" id="twilioToken" name="twilioToken"
+                            placeholder="Enter new token to update"
+                            autocomplete="off">
                     </div>
                     <div class="form-group">
                         <label for="twilioSender">Sender ID (From Number)</label>
-                        <input type="tel" id="twilioSender" name="twilioSender" value="<%= profile.get("twilioSender") %>" required>
+                        <input type="tel" id="twilioSender" name="twilioSender"
+                            value="<%= esc(profile.get("twilioSender")) %>"
+                            autocomplete="off"
+                            required>
                     </div>
                 </div>
 
                 <button type="submit">Save Changes</button>
             </form>
+
+            <% } %>
         </div>
     </div>
 </body>
