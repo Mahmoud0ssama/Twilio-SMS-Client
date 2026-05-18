@@ -19,37 +19,65 @@
         .link-btn:hover { color: var(--text-primary); text-decoration: underline; transform: none; box-shadow: none; background: none; filter: none; }
     </style>
 </head>
+<%!
+    private String esc(Object o) {
+        if (o == null) return "";
+        return o.toString()
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+    }
+%>
 <body>
     <div class="auth-container">
         <div class="auth-card">
             <div class="auth-header">
                 <h1>Verify Phone</h1>
                 <p>Enter the 6-digit code sent to
-                    <strong style="color: var(--text-primary);"><%= request.getAttribute("msisdn") != null ? request.getAttribute("msisdn") : "your number" %></strong>
+                    <strong style="color: var(--text-primary);">
+                        <%= request.getAttribute("msisdn") != null
+                            ? esc(request.getAttribute("msisdn"))
+                            : "your number" %>
+                    </strong>
                 </p>
             </div>
 
             <% if (request.getAttribute("message") != null) { %>
-                <div class="message success"><%= request.getAttribute("message") %></div>
+                <div class="message success">
+                    <%= esc(request.getAttribute("message")) %>
+                </div>
             <% } %>
             <% if (request.getAttribute("error") != null) { %>
-                <div class="message error"><%= request.getAttribute("error") %></div>
+                <div class="message error">
+                    <%= esc(request.getAttribute("error")) %>
+                </div>
             <% } %>
 
             <form action="verify-msisdn" method="post" class="auth-form">
+                <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
                 <div class="form-group">
-                    <input type="text" id="code" name="code" class="code-input" placeholder="000000"
-                        pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required autofocus>
+                    <label for="code" class="sr-only">Verification Code</label>
+                    <input type="text" id="code" name="code"
+                        class="code-input"
+                        placeholder="000000"
+                        pattern="[0-9]{6}"
+                        maxlength="6"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        required autofocus>
                 </div>
-                <button type="submit">Verify & Complete</button>
+                <button type="submit">Verify &amp; Complete</button>
             </form>
 
             <div class="form-actions">
                 <form action="verify-msisdn" method="post" style="display:inline;">
+                    <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
                     <input type="hidden" name="action" value="resend">
                     <button type="submit" class="link-btn">Didn't receive code? Resend</button>
                 </form>
                 <form action="verify-msisdn" method="post" style="display:inline;">
+                    <input type="hidden" name="csrfToken" value='<%= session.getAttribute("csrfToken") %>'>
                     <input type="hidden" name="action" value="cancel">
                     <button type="submit" class="link-btn" style="color: var(--red);">Cancel Registration</button>
                 </form>
