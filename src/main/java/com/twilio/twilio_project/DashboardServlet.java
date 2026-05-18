@@ -35,7 +35,26 @@ public class DashboardServlet extends HttpServlet {
         }
 
         int userId = (int) session.getAttribute("userId");
-        request.setAttribute("smsHistory", UserRepository.findSmsHistoryByUserId(userId));
+
+        String searchFrom = request.getParameter("searchFrom");
+        String searchTo = request.getParameter("searchTo");
+        String startDate = request.getParameter("startDate");
+        String endDate = request.getParameter("endDate");
+
+        if ((searchFrom != null && !searchFrom.trim().isEmpty()) ||
+            (searchTo != null && !searchTo.trim().isEmpty()) ||
+            (startDate != null && !startDate.trim().isEmpty()) ||
+            (endDate != null && !endDate.trim().isEmpty())) {
+            request.setAttribute("smsHistory", UserRepository.searchSmsHistoryByUserId(userId, searchFrom, searchTo, startDate, endDate));
+            
+            // Pass search params back to view so the form stays populated
+            request.setAttribute("searchFrom", searchFrom);
+            request.setAttribute("searchTo", searchTo);
+            request.setAttribute("startDate", startDate);
+            request.setAttribute("endDate", endDate);
+        } else {
+            request.setAttribute("smsHistory", UserRepository.findSmsHistoryByUserId(userId));
+        }
 
         try {
             CustomerTwilioConfig twilio = UserRepository.findTwilioConfigByUserId(userId);
