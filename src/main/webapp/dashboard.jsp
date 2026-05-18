@@ -114,6 +114,7 @@
                 <h1>Twilio SMS Dashboard</h1>
                 <div class="header-right">
                     <span class="welcome">Welcome!</span>
+                    <a href="profile" class="logout-btn" style="background-color: var(--primary-color);">Profile</a>
                     <a href="logout" class="logout-btn">Logout</a>
                 </div>
             </div>
@@ -154,6 +155,26 @@
 
                 <div class="card sms-history">
                     <h2>SMS History</h2>
+                    <form action="dashboard" method="get" style="margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="searchFrom" style="font-size: 0.85rem;">From</label>
+                            <input type="text" id="searchFrom" name="searchFrom" value="<%= request.getAttribute("searchFrom") != null ? request.getAttribute("searchFrom") : "" %>" style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="searchTo" style="font-size: 0.85rem;">To</label>
+                            <input type="text" id="searchTo" name="searchTo" value="<%= request.getAttribute("searchTo") != null ? request.getAttribute("searchTo") : "" %>" style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="startDate" style="font-size: 0.85rem;">Start Date</label>
+                            <input type="date" id="startDate" name="startDate" value="<%= request.getAttribute("startDate") != null ? request.getAttribute("startDate") : "" %>" style="padding: 0.5rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="endDate" style="font-size: 0.85rem;">End Date</label>
+                            <input type="date" id="endDate" name="endDate" value="<%= request.getAttribute("endDate") != null ? request.getAttribute("endDate") : "" %>" style="padding: 0.5rem;">
+                        </div>
+                        <button type="submit" style="padding: 0.5rem 1rem;">Search</button>
+                        <a href="dashboard" style="padding: 0.5rem 1rem; text-decoration: none; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color);">Clear</a>
+                    </form>
                     <div class="table-wrapper">
                         <table>
                             <thead>
@@ -163,6 +184,7 @@
                                     <th>Body</th>
                                     <th>Status</th>
                                     <th>Sent At</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -177,11 +199,17 @@
                                     <td><%= sms.get("message") %></td>
                                     <td><span class="status-<%= sms.get("status") %>"><%= sms.get("status") %></span></td>
                                     <td><%= sms.get("sentAt") %></td>
+                                    <td>
+                                        <form action="delete-sms" method="post" style="margin: 0; display: inline;" onsubmit="return confirm('Are you sure you want to delete this SMS?');">
+                                            <input type="hidden" name="smsId" value="<%= sms.get("id") %>">
+                                            <button type="submit" style="background-color: #dc3545; padding: 0.25rem 0.5rem; font-size: 0.8rem; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+                                        </form>
+                                    </td>
                                 </tr>
                                 <% }
                                 } else { %>
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted">No SMS history found</td>
+                                    <td colspan="6" class="text-center text-muted">No SMS history found</td>
                                 </tr>
                                 <% } %>
                     </tbody>
