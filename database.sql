@@ -1,6 +1,4 @@
--- Twilio SMS Client — full schema (fresh install / empty database)
--- Apply once on Neon SQL Editor or: psql ... -f database.sql
--- Do NOT run alterations.sql afterward — it is only for upgrading old databases.
+-- Twilio SMS Client - full schema 
 
 CREATE TYPE user_role AS ENUM ('customer', 'administrator');
 CREATE TYPE message_status AS ENUM ('pending', 'delivered', 'failed');
