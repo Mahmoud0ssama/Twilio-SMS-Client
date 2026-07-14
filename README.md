@@ -18,6 +18,7 @@ frontend/                          → Svelte 5 SPA (Vite + Tailwind v4)
 src/main/java/.../                 → Jakarta EE 10 servlets (JSON REST)
 ├── SmppSessionManager             → SMPP session pool (jsmpp)
 ├── SmppSmsProvider                → SMPP send wrapper
+├── SmpEventLogger                 → SMPP event DB logger
 ├── TwilioSmsProvider              → Twilio REST API wrapper
 ├── TwilioSmsService               → Twilio for registration (separate creds)
 ├── SmsRouter                      → Provider dispatch: TWILIO|SMPP|AUTO
@@ -29,9 +30,12 @@ src/main/java/.../                 → Jakarta EE 10 servlets (JSON REST)
 ├── RegisterServlet / VerifyMsisdnServlet  → MSISDN verification
 ├── SendSmsServlet / DeleteSmsServlet      → SMS CRUD
 ├── DashboardServlet / ProfileServlet      → User data
+├── TwilioWebhookServlet           → Inbound SMS callback
 ├── Admin*Servlet                  → Admin console
-└── TwilioWebhookServlet           → Inbound SMS callback
-NeonDB                             → PostgreSQL (Flyway V1–V5)
+├── AdminLogServlet                → GET /admin/smpp-logs
+├── WiresharkServlet               → POST/GET /admin/wireshark/*
+└── SpaFilter                      → SPA routing fallback
+NeonDB                             → PostgreSQL (Flyway V1–V6)
 smscsim (Docker)                   → Local SMPP SMSC simulator
 ```
 
@@ -135,7 +139,24 @@ curl -X POST http://localhost:12775/ \
 | `SMPP_PASSWORD` | both | e.g. `password` |
 | `SMPP_ADDRESS_RANGE` | both | optional source address override |
 
-`EnvLoader` resolves `LOCAL_` or `DOCKER_` prefix based on `APP_PROFILE`. Flyway (V1–V5) auto-migrates on startup.
+`EnvLoader` resolves `LOCAL_` or `DOCKER_` prefix based on `APP_PROFILE`.
+
+## Database Migrations (Flyway)
+
+[Flyway](https://flywaydb.org/) applies versioned SQL migrations on every app startup. When you run the app, `DBUtil` calls `Flyway.migrate()` — Flyway checks a `flyway_schema_history` table in NeonDB, compares it against migration files in `src/main/resources/db/migration/`, and applies any new ones in order. Already-applied migrations are skipped (checksum-verified to detect tampering).
+
+**When to create a migration**: anytime we change the DB schema — add a table, add a column, create an enum. Every migration must be **additive only** (no DROP, no ALTER without `IF NOT EXISTS`). This ensures all dev instances stay in sync regardless of which migrations they've already applied.
+
+| File | Adds |
+|------|------|
+| `V1__database.sql` (baseline) | `users`, `sms_history`, message_status enum |
+| `V2__user_role.sql` | user_role enum, role column |
+| `V3__sms_provider.sql` | sms_provider + SMPP columns on users |
+| `V4__internal_messages.sql` | Internal chat table |
+| `V5__system_message_reads.sql` | Broadcast read tracking |
+| `V6__add_smpp_event_logs.sql` | `smpp_event_logs` table |
+
+Naming: `V{next_number}__{short_description}.sql`. Place in `src/main/resources/db/migration/`. Run via `mvn jetty:run` — Flyway executes on startup.
 
 ## API Endpoints
 
@@ -185,7 +206,7 @@ Database columns on `users` table (added by Flyway V4):
 │   └── vite.config.js        # Build output → ../src/main/webapp/
 ├── src/main/
 │   ├── java/.../twilio_project/   # Servlets, providers, DAO, utils
-│   ├── resources/db/migration/    # Flyway V2–V5
+│   ├── resources/db/migration/    # Flyway V2–V6
 │   └── webapp/               # Vite build target (static assets)
 ├── .env.example              # Template (safe to commit)
 ├── .env.local                # Local creds (gitignored)
