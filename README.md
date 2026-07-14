@@ -7,9 +7,13 @@
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/Twilio-9-F22F46?style=for-the-badge&logo=twilio&logoColor=white" alt="Twilio" />
   <img src="https://img.shields.io/badge/SMPP-jsmpp_3.x-00B4D8?style=for-the-badge&logo=googlemessages&logoColor=white" alt="SMPP" />
+  <img src="https://img.shields.io/badge/Flyway-10-CC0200?style=for-the-badge&logo=flyway&logoColor=white" alt="Flyway" />
+  <img src="https://img.shields.io/badge/HikariCP-5-00B4D8?style=for-the-badge&logo=java&logoColor=white" alt="HikariCP" />
 </p>
 
 Dual-provider SMS platform — **Twilio** and **SMPP** with per-user provider routing, real-time internal chat, admin broadcast, and profile-based environment configuration.
+
+> **New to the project?** See the [ONBOARDING.md](ONBOARDING.md) guide for architecture deep-dive, code walkthrough, testing guide, and troubleshooting.
 
 ## Architecture
 
@@ -72,6 +76,22 @@ podman-compose --env-file .env up -d
 ```
 
 Set `APP_PROFILE=docker` in `.env` for container networking.
+
+### Test Credentials
+
+| User | Password | Role | Provider |
+|------|----------|------|----------|
+| `admin` | `123456` | administrator | — |
+| `zkhattab` | `kh007` | customer | AUTO (SMPP → localhost:2776) |
+
+## Features
+
+- **Dual SMS providers** — Twilio + SMPP with per-user routing (TWILIO / SMPP / AUTO)
+- **Real-time internal chat** — WebSocket between any two users, plus admin broadcast
+- **Admin debug panel** — SMPP event logs (persistent DB), Wireshark packet capture from browser
+- **SMS chat UI** — WhatsApp-style conversation threads with delivery status
+- **Profile-based env** — `APP_PROFILE=local|docker` switches SMPP host/port automatically
+- **Flyway migrations** — versioned, additive-only schema changes on every startup
 
 ## Provider Routing
 
@@ -198,6 +218,31 @@ curl -X POST http://localhost:12775/ \
 | `V6__add_smpp_event_logs.sql` | `smpp_event_logs` table |
 
 Naming: `V{next_number}__{short_description}.sql`. Place in `src/main/resources/db/migration/`. Run via `mvn jetty:run` — Flyway executes on startup.
+
+## Security Model
+
+| Layer | Mechanism |
+|-------|-----------|
+| Password storage | BCrypt (`jbcrypt`) |
+| Session auth | HTTP session tracked by `AuthFilter`, cookie-based |
+| Admin routes | `AuthFilter` checks `role=administrator`, redirects non-admin |
+| Rate limiting | Login: 5 req/min per IP (`LoginServlet`) |
+| WebSocket auth | Same HTTP session, validated on upgrade (`ChatWebSocket`) |
+| Twilio webhook | Optional `X-Twilio-Signature` validation (if `TWILIO_AUTH_TOKEN` set) |
+
+## Internal Chat
+
+WebSocket at `/ws/chat` (JSR 356) — authenticated via HTTP session. REST fallback at `/api/chat/*` for history. Messages stored in `internal_messages` table. Admin broadcast via `POST /admin/broadcast` sends to all users over WebSocket + optional real SMS.
+
+## Admin Panel
+
+| Feature | Endpoint | Description |
+|---------|----------|-------------|
+| Dashboard | `GET /admin/dashboard` | Customer list, SMS stats, counters |
+| Customer CRUD | `GET/POST /admin/customer` | Create/edit/delete accounts |
+| Broadcast | `POST /admin/broadcast` | Message all users (chat + optional SMS) |
+| SMPP Logs | `GET /admin/smpp-logs` | Last 500 persistent SMPP events (3s auto-refresh) |
+| Wireshark | `POST/GET /admin/wireshark/*` | Start/stop capture, live packet table, PCAP download |
 
 ## API Endpoints
 
