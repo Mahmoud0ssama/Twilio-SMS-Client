@@ -22,6 +22,10 @@
   let newContactNum = $state('');
   let isNewChatModalOpen = $state(false);
   
+  // Unread counts for tab badges
+  let internalUnread = $state(0);
+  let systemUnread = $state(0);
+  
   // Profile Modal State
   let isProfileModalOpen = $state(false);
   let profileEdit = $state({});
@@ -131,12 +135,26 @@
   }
 
   let pollTimer;
+  let unreadTimer;
+
+  async function pollUnread() {
+    try {
+      const res = await fetch('/api/chat/unread');
+      if (res.ok) {
+        const d = await res.json();
+        internalUnread = d.internalUnread || 0;
+        systemUnread = d.systemUnread || 0;
+      }
+    } catch (ignored) {}
+  }
 
   onMount(() => {
     fetchDashboard().then(() => {
       pollTimer = setTimeout(pollDashboard, 5000);
     });
-    return () => clearTimeout(pollTimer);
+    pollUnread();
+    unreadTimer = setInterval(pollUnread, 10000);
+    return () => { clearTimeout(pollTimer); clearInterval(unreadTimer); };
   });
 
   async function handleSend(e) {
@@ -299,10 +317,16 @@
         <button class="tab-btn {chatMode === 'internal' ? 'tab-active' : ''}" onclick={() => chatMode = 'internal'}>
           <Users size={14} />
           Internal
+          {#if internalUnread > 0}
+            <span class="bg-red-500/80 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ml-1.5">{internalUnread > 99 ? '99+' : internalUnread}</span>
+          {/if}
         </button>
         <button class="tab-btn {chatMode === 'system' ? 'tab-active' : ''}" onclick={() => chatMode = 'system'}>
           <MessageSquare size={14} />
           System
+          {#if systemUnread > 0}
+            <span class="bg-red-500/80 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ml-1.5">{systemUnread > 99 ? '99+' : systemUnread}</span>
+          {/if}
         </button>
       </div>
 

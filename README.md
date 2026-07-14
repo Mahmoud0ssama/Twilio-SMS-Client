@@ -94,27 +94,129 @@ curl -s http://localhost:8080/login -X POST \
 
 ## Features
 
-### Customer Dashboard
-- **SMS Chat UI** — WhatsApp-style conversation threads grouped by phone number. Dual-tone bubbles: outbound (cyan accent) on right, inbound (emerald accent) on left. Delivery status icons: pending (Check), delivered (CheckCheck green), failed (X red). Delete individual messages. 5-second auto-poll for new messages.
-- **New Conversation** — modal to start chat with any phone number (with country code).
-- **Profile Settings** — modal with Account Info (name, MSISDN, email, birthday, job, address, password change), Twilio credentials (SID, token, sender ID), and SMS Provider config (TWILIO/SMPP/AUTO selector + SMPP host/port/systemId/password/addressRange).
-- **Internal Chat** — real-time user-to-user messaging via WebSocket (`/ws/chat`). User list, conversation history, send/receive with auto-reconnect.
-- **System Messages** — tab showing admin broadcasts and system notifications.
+### 1. Authentication & Session Management
 
-### Admin Dashboard
-- **Metric Cards** — Active Accounts count, Total Outbound SMS count. Real-time from server.
-- **Customer Directory** — searchable table with username, full name, MSISDN, email, job, outbound SMS count, created date. Per-row actions: Edit (full profile modal), SMS (per-customer history modal), Delete (with confirmation).
-- **SMS History Modal** — per-customer, chronologically sorted. OUTBOUND/INBOUND colored badges, recipient/sender phone, delivery status, close button.
-- **SMPP Logs Modal** — last 500 persistent events from `smpp_event_logs` table. Auto-refresh every 3s. Color-coded by severity (ERROR=red, WARN=yellow, INFO=green). Columns: timestamp, level, event type, detail (truncated at 180 chars).
-- **Broadcast Modal** — compose message, optional "send as real SMS" checkbox (routes via each user's configured provider). Shows push count on success.
-- **Broadcasts History** — scrollable list of recent broadcast messages with timestamps.
-- **Wireshark Capture** — start/stop `dumpcap` from browser. Live packet table via `tshark` polling (2s). Download raw PCAP file.
+| Feature | Endpoint | Detail |
+|---------|----------|--------|
+| Login | `POST /login` | JSON `{username, password}`. BCrypt verify. Rate-limited (5 attempts/min/IP). Creates HTTP session with `userId` + `role`. |
+| Logout | `GET /logout` | `session.invalidate()`. |
+| Register | `POST /register` | Full profile + Twilio creds. Sends 6-digit PIN via Twilio SMS. `PendingRegistration` in session (10-min TTL). |
+| Verify MSISDN | `POST /verify-msisdn` | PIN match. OTP resend via `?action=resend`. Account creation on success. |
+| AuthFilter | filter on `/dashboard`, `/profile`, `/admin/*` | 401 if unauthenticated, 403 if non-admin on `/admin/*`. |
+| SpaFilter | `/*` | GET passthrough for API paths, else → `index.html` SPA fallback. |
 
-### Platform
-- **Dual SMS Providers** — Twilio + SMPP with per-user routing (TWILIO / SMPP / AUTO). AUTO tries SMPP first, falls back to Twilio.
-- **Real-time Internal Chat** — WebSocket between any two users, plus admin broadcast.
-- **Profile-Based Environment** — `APP_PROFILE=local|docker` switches SMPP host/port automatically.
-- **Flyway Migrations** — versioned, additive-only schema changes on every startup.
+### 2. Customer Dashboard
+
+| Feature | Trigger | Backend | Behavior |
+|---------|---------|---------|----------|
+| SMS Chat | `GET /dashboard` every 5s | `DashboardServlet` | Conversation sidebar grouped by phone, sorted by latest message. Dual-tone bubbles with status icons (pending ✓, delivered ✓✓, failed ✗). |
+| New Conversation | New Chat button | — | Enter phone number → creates active thread. |
+| Send SMS | Submit on chat bar | `POST /send-sms` → `SmsRouter` | Routed by user's `sms_provider`. Recorded to `sms_history`. |
+| Delete Message | Trash icon per bubble | `POST /delete-sms` | Confirmation dialog. User-scoped delete. |
+| Internal Chat | Internal tab | WS `/ws/chat` + `GET /api/chat/*` | Real-time user-to-user, server push, user list, history, read tracking, unread badge. |
+| System Messages | System tab | `GET /api/chat/system` | Admin broadcasts, read tracking via `system_message_reads`. |
+| Profile Settings | Edit Profile button | `GET/POST /profile` | Account Info + Twilio creds + SMS Provider config (TWILIO/SMPP/AUTO + SMSC details). |
+
+### 3. Admin Console
+
+| Feature | Trigger | Backend | Behavior |
+|---------|---------|---------|----------|
+| Metric Cards | on load | `GET /admin/dashboard` | Active Accounts + Total Outbound SMS counters. |
+| Customer Directory | on load | `GET /admin/dashboard` | Table with Edit/SMS/Delete per row. |
+| Create Customer | Create button | `POST /admin/customer` (actionType=create) | Empty form. Bypasses PIN flow. Full profile + SMPP config. E.164 validation. |
+| Edit Customer | Edit per row | `GET /admin/customer?id=N` → `POST` save | Conditional partial update. |
+| Delete Customer | Delete per row | `POST /admin/customer` (actionType=delete) | Confirmation dialog. |
+| SMS History | SMS per row | `GET /admin/customer?id=N&action=sms_history` | Merged outbound+inbound, sorted by time, colored badges. |
+| Broadcast | Broadcast button | `POST /admin/broadcast` | System message + optional real SMS via each user's provider. WebSocket push. |
+| Broadcasts History | 30s refresh | `GET /api/chat/system?limit=100` | Scrollable list with timestamps. |
+| SMPP Logs | SMPP Logs modal | `GET /admin/smpp-logs` every 3s | See #7 below. |
+| Wireshark | Wireshark modal | `POST/GET /admin/wireshark/*` | See #6 below. |
+
+### 4. SMS Providers & Routing
+
+`SmsRouter` dispatches per user's `sms_provider`. See [full routing detail](#provider-routing).
+
+### 5. SMPP Session Management
+
+`SmppSessionManager` pool keyed by `host:port:systemId` (`ConcurrentHashMap`).
+
+- **Reuse** — returns existing session if `isBound()`, rebinds if closed
+- **Keepalive** — `setEnquireLinkTimer(30000)`, `setTransactionTimer(10000)`
+- **State listener** — auto-removes from pool on `CLOSED`, logs warning
+- **DLR** — `DELIVER_SM` with `esmClass==4` → `DeliveryReceipt` parser → `updateSmsStatusByProviderRefId()`
+- **MO** — `DELIVER_SM` inbound → `decodeShortMessage()` (UTF-8/UTF-16BE via `dataCoding`) → `findUserIdByPhone()` → `saveInboundSms()`
+- **Shutdown** — `closeAll()` unbinds all pooled sessions
+
+### 6. Wireshark Packet Capture (Admin)
+
+Live SMPP packet capture from browser via `dumpcap` + `tshark`.
+
+| Action | Endpoint | Detail |
+|--------|----------|--------|
+| Start | `POST /admin/wireshark/start` | `sg wireshark -c "dumpcap -i lo -f \"port 2776\" -w /tmp/smpp_capture.pcap -P"`. Singleton (rejects if running). Deletes old PCAP. |
+| Stop | `POST /admin/wireshark/stop` | `process.destroyForcibly()`. Returns duration + fileSize. |
+| Status | `GET /admin/wireshark/status` | `{running, fileExists, durationSec, packetCount, fileSize}` |
+| Packets | `GET /admin/wireshark/packets` | `tshark -r <pcap> -T json` → parses frame/IP/SMPP layers → simplified JSON array. SMPP commands decoded from hex to names (BIND_TRX, SUBMIT_SM, etc). Message truncated to 80 chars. |
+| Download | `GET /admin/wireshark/download` | Serves PCAP as `application/vnd.tcpdump.pcap`. |
+
+**Permission**: user in `wireshark` group, `sg wireshark` for privilege escalation. Admin role enforced at servlet level.
+
+### 7. SMPP Event Logging
+
+Persistent SMPP events — in-memory buffer + `smpp_event_logs` DB table (V6).
+
+| Aspect | Detail |
+|--------|--------|
+| Buffer | `synchronizedList`, max 500 entries, oldest evicted |
+| Endpoint | `GET /admin/smpp-logs` — JSON array, newest-first, `{timestamp, level, event, detail}` |
+| Sources | BIND, UNBIND, SUBMIT_SM, DELIVER_SM, DLR, MO, ENQUIRE_LINK, ERROR |
+| Frontend | 3s auto-refresh when modal open. Color-coded (ERROR=red, WARN=yellow, INFO=green). |
+| Persistence | Also written to `smpp_event_logs` table — survives restarts |
+
+### 8. Internal Chat & Broadcasts
+
+| Aspect | Detail |
+|--------|--------|
+| WebSocket | `/ws/chat` (JSR 356). Authed via HTTP session in handshake. `pushToUser(userId, json)` server push. Per-user `ConcurrentHashMap<Integer, Set<Session>>`. |
+| REST API | `POST /api/chat/send`, `GET /api/chat/history?with=X&before=Y&limit=Z`, `GET /api/chat/users`, `GET /api/chat/unread`, `GET /api/chat/system` |
+| Unread | `read_at` on `internal_messages`. `last_read_id` upsert on `system_message_reads`. Polled every 10s. Badge on tab button. |
+| Broadcast | `POST /admin/broadcast` → `system_messages` insert → WebSocket push → optional real SMS |
+| Self-msg guard | Server rejects `recipientId == userId` |
+
+### 9. Inbound SMS (MO)
+
+| Source | Handler | Detail |
+|--------|---------|--------|
+| SMPP | `SmppSessionManager.MessageReceiverListener` | `DELIVER_SM` (esmClass != 4). `findUserIdByPhone()` → `saveInboundSms()`. |
+| Twilio | `POST /webhook/sms` | Optional `X-Twilio-Signature` validation. Matches Twilio number to user. Returns TwiML `<Response/>`. |
+
+### 10. Database Migrations
+
+Flyway auto-migration on startup. See [full migration detail](#database-migrations-flyway).
+
+### 11. Security Model
+
+See [full security model](#security-model).
+
+### 12. Technology Stack
+
+| Component | Version | Role |
+|-----------|---------|------|
+| Java | 21 | Language |
+| Jakarta EE | 10 | Servlet 6.1, WebSocket 2.1 |
+| Jetty Maven Plugin | 11.0.20 | Server (`mvn jetty:run`) |
+| PostgreSQL | 16 | Database (NeonDB) |
+| HikariCP | 7.0.2 | Pool (max 3) |
+| Flyway | 10.22.0 | Schema versioning |
+| JSMPP | 3.0.2 | SMPP protocol |
+| Twilio SDK | 9.2.0 | Twilio REST API |
+| Gson | 2.10.1 | JSON |
+| jbcrypt | 0.4 | Password hashing |
+| dotenv-java | 3.0.0 | `.env` loading |
+| SLF4J Simple | 2.0.16 | Logging |
+| Svelte | 5 | Frontend SPA |
+| Tailwind CSS | 4 | CSS framework |
+| Vite | latest | Build + HMR (:5173) |
 
 ## Provider Routing
 
@@ -256,40 +358,14 @@ Naming: `V{next_number}__{short_description}.sql`. Place in `src/main/resources/
 |-------|-----------|
 | Password storage | BCrypt (`jbcrypt`) |
 | Session auth | HTTP session tracked by `AuthFilter`, cookie-based |
-| Admin routes | `AuthFilter` checks `role=administrator`, redirects non-admin |
-| Rate limiting | Login: 5 req/min per IP (`LoginServlet`) |
+| Admin routes | `AuthFilter` checks `role=administrator`, returns 403 for non-admin |
+| Rate limiting | Login: 5 req/min per IP (`ConcurrentHashMap`), returns 429 |
 | WebSocket auth | Same HTTP session, validated on upgrade (`ChatWebSocket`) |
 | Twilio webhook | Optional `X-Twilio-Signature` validation (if `TWILIO_AUTH_TOKEN` set) |
+| SMS deletion | User-scoped: `DELETE FROM sms_history WHERE id=? AND user_id=?` |
+| Duplicate prevention | `existsByUsernameEmailOrMsisdn()` on register/create |
+| MSISDN format | E.164 enforced (`^\+\\d{5,15}$`) |
 
-## Internal Chat
-
-WebSocket at `/ws/chat` (JSR 356) — authenticated via HTTP session. REST fallback at `/api/chat/*` for history. Messages stored in `internal_messages` table. Admin broadcast via `POST /admin/broadcast` sends to all users over WebSocket + optional real SMS.
-
-## Admin Panel
-
-| Feature | Trigger | Backend | Behavior |
-|---------|---------|---------|----------|
-| Metric Cards | on load | `GET /admin/dashboard` | Active Accounts + Total Outbound SMS counters |
-| Customer Table | on load | `GET /admin/dashboard` | All customers with username, MSISDN, email, job, SMS count, created date |
-| Edit Customer | Edit button per row | `GET /admin/customer?id=N` → profile modal | Loads full profile, save via `POST /admin/customer` |
-| Create Customer | Create Customer button | `POST /admin/customer` | Empty form modal, same save endpoint |
-| Delete Customer | Delete button per row | `POST /admin/customer` with `{actionType:delete}` | Confirmation dialog before delete |
-| SMS History | SMS button per row | `GET /admin/customer?id=N&action=sms_history` | Modal: outbound + inbound messages sorted by time, colored OUTBOUND/INBOUND badges, status |
-| Broadcast | Broadcast button → modal | `POST /admin/broadcast` | Textarea + "send as SMS" checkbox. Returns push count. |
-| Broadcasts History | on load | `GET /api/chat/system?limit=100` | Scrollable list of past broadcasts with timestamps |
-| SMPP Logs | SMPP Logs button → modal | `GET /admin/smpp-logs` every 3s | Persistent DB logs, color-coded (ERROR=red, WARN=yellow, INFO=green), timestamp/event/detail columns |
-| Wireshark Capture | Wireshark button → modal | `POST/GET /admin/wireshark/*` | Start/stop `dumpcap`, live packet table via `tshark` (2s poll), PCAP download |
-
-## Customer Dashboard
-
-| Feature | Location | Backend | Behavior |
-|---------|----------|---------|----------|
-| SMS Chat | SMS tab (default) | `GET /dashboard` every 5s | Conversation sidebar + message thread. Dual-tone bubbles with status icons. Send via `POST /send-sms`. |
-| New Conversation | New Chat button → modal | — | Enter phone number → creates thread |
-| Delete Message | Trash icon per bubble | `POST /delete-sms` | Confirmation dialog |
-| Profile Settings | Edit Profile button → modal | `GET /profile` + `POST /profile` | Account Info, Twilio creds, SMS Provider config |
-| Internal Chat | Internal tab | WebSocket `/ws/chat` + `GET /api/chat/*` | Real-time user-to-user. User list, message history, send. Auto-reconnect. |
-| System Messages | System tab | `GET /api/chat/system` | Admin broadcasts and system notifications |
 
 ## API Endpoints
 
@@ -309,22 +385,6 @@ WebSocket at `/ws/chat` (JSR 356) — authenticated via HTTP session. REST fallb
 | GET | `/api/chat/*` | session | Internal chat message history |
 | WS | `/ws/chat` | session | Real-time internal chat |
 | POST | `/webhook/sms` | none | Twilio inbound webhook callback |
-
-## Per-User Provider Config
-
-Database columns on `users` table (added by Flyway V4):
-
-| Column | Example |
-|--------|---------|
-| `sms_provider` | `TWILIO`, `SMPP`, `AUTO`, or `NULL` (defaults to TWILIO) |
-| `smpp_host` | `127.0.0.1` |
-| `smpp_port` | `2776` |
-| `smpp_system_id` | `smppclient` |
-| `smpp_password` | `password` |
-| `smpp_source_addr` | optional override |
-| `twilio_account_sid` | `AC...` |
-| `twilio_auth_token` | `...` |
-| `twilio_sender_id` | `+13613221215` |
 
 ## FAQ
 
