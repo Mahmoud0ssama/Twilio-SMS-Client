@@ -111,24 +111,20 @@ sequenceDiagram
     participant DB as NeonDB
 
     App->>SMSC: BIND_TRX
-    SMSC-->>App: BIND_TRX_RESP (ok)
+    SMSC-->>App: BIND_TRX_RESP
 
-    rect rgb(200, 240, 200)
     Note over App,SMSC: MT (Outbound)
     App->>SMSC: SUBMIT_SM (recipient, message)
     SMSC-->>App: SUBMIT_SM_RESP + msg_id
-    SMSC-->>App: DELIVER_SM (DLR, esm_class=4, ~2s later)
+    SMSC-->>App: DELIVER_SM (DLR, ~2s later)
     Note over App: parse DeliveryReceipt(id, status)<br/>updateSmsStatusByProviderRefId()
     App->>DB: UPDATE sms_history SET status=DELIVRD
-    end
 
-    rect rgb(240, 220, 200)
     Note over SMSC: MO (Inbound)
     SMSC->>App: DELIVER_SM (sender, recipient, message)
     Note over App: decodeShortMessage(ucs2→utf16)<br/>findUserIdByPhone(recipient)<br/>saveInboundSms()
     App->>DB: INSERT INTO sms_history (direction='inbound')
     App-->>SMSC: DELIVER_SM_RESP
-    end
 ```
 
 ### DLR (Delivery Receipts)
