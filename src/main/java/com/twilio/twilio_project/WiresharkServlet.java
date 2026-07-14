@@ -12,6 +12,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,6 +28,7 @@ public class WiresharkServlet extends HttpServlet {
     private static final String PCAP_FILE = "smpp_capture.pcap";
 
     private static final ConcurrentHashMap<String, CaptureState> captures = new ConcurrentHashMap<>();
+    private static Boolean tsharkAvailable = null;
 
     private static class CaptureState {
         final Process process;
@@ -40,26 +43,50 @@ public class WiresharkServlet extends HttpServlet {
         boolean isRunning() {
             return !stopped.get() && process.isAlive();
         }
+    }
 
-        int getPacketCount() {
-            Path pcap = PCAP_DIR.resolve(PCAP_FILE);
-            if (!Files.exists(pcap)) return 0;
-            try {
-                String out = exec("tshark", "-r", pcap.toString(), "-T", "fields", "-e", "frame.number");
-                if (out == null) return 0;
-                return (int) out.lines().filter(l -> !l.isEmpty()).count();
-            } catch (Exception e) {
-                return -1;
+    /** Count packets by reading PCAP file directly — no tshark needed. */
+    private static int countPcapPackets(Path pcap) {
+        if (!Files.exists(pcap)) return 0;
+        try (RandomAccessFile f = new RandomAccessFile(pcap.toFile(), "r")) {
+            if (f.length() < 24) return 0;
+            f.seek(20);
+            int linkType = readIntLE(f);
+            // skip 24-byte global header
+            f.seek(24);
+            int count = 0;
+            while (f.getFilePointer() + 16 <= f.length()) {
+                int inclLen = readIntLE(f); // ts_sec(4) + ts_usec(4) + incl_len(4)
+                f.skipBytes(8); // skip ts_sec, ts_usec
+                inclLen = readIntLE(f); // incl_len
+                f.skipBytes(4);        // orig_len
+                if (inclLen > 65535) break; // sanity
+                long pos = f.getFilePointer() + inclLen;
+                if (pos > f.length()) break;
+                f.seek(pos);
+                count++;
             }
+            return count;
+        } catch (Exception e) {
+            return -1;
         }
+    }
 
-        long getFileSize() {
-            try {
-                return Files.size(PCAP_DIR.resolve(PCAP_FILE));
-            } catch (IOException e) {
-                return 0;
-            }
+    private static int readIntLE(RandomAccessFile f) throws IOException {
+        byte[] b = new byte[4];
+        f.readFully(b);
+        return ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).getInt();
+    }
+
+    private static boolean isTsharkAvailable() {
+        if (tsharkAvailable != null) return tsharkAvailable;
+        try {
+            Process p = new ProcessBuilder("which", "tshark").redirectErrorStream(true).start();
+            tsharkAvailable = p.waitFor() == 0;
+        } catch (Exception e) {
+            tsharkAvailable = false;
         }
+        return tsharkAvailable;
     }
 
     private static String exec(String... cmd) {
@@ -96,6 +123,7 @@ public class WiresharkServlet extends HttpServlet {
                 case "/status" -> handleStatus(resp);
                 case "/packets" -> handlePackets(resp);
                 case "/download" -> handleDownload(req, resp);
+                case "/launch" -> handleLaunch(resp);
                 default -> {
                     resp.setStatus(404);
                     resp.getWriter().write("{\"status\":\"error\",\"message\":\"Unknown action\"}");
@@ -120,20 +148,18 @@ public class WiresharkServlet extends HttpServlet {
         Path pcap = PCAP_DIR.resolve(PCAP_FILE);
         Files.deleteIfExists(pcap);
 
-        // dumpcap needs wireshark group — use sg
         ProcessBuilder pb = new ProcessBuilder(
             "sg", "wireshark", "-c",
-            "/usr/bin/dumpcap -i lo -f \"port 2776\" -w " + pcap + " -P"
+            "/usr/bin/dumpcap -i lo -f \"port 8080 or port 2776 or port 12775 or port 5173\" -w " + pcap + " -F pcap"
         );
         pb.redirectErrorStream(true);
         Process proc = pb.start();
 
-        CaptureState state = new CaptureState(proc);
-        captures.put(PCAP_FILE, state);
+        captures.put(PCAP_FILE, new CaptureState(proc));
 
         JsonObject res = new JsonObject();
         res.addProperty("status", "success");
-        res.addProperty("message", "Capture started on lo:2776");
+        res.addProperty("message", "Capture started on lo (ports 8080, 2776, 12775, 5173)");
         resp.getWriter().write(gson.toJson(res));
     }
 
@@ -147,12 +173,14 @@ public class WiresharkServlet extends HttpServlet {
         state.process.destroyForcibly();
         captures.remove(PCAP_FILE);
 
+        Path pcap = PCAP_DIR.resolve(PCAP_FILE);
         JsonObject res = new JsonObject();
         res.addProperty("status", "success");
         res.addProperty("message", "Capture stopped");
         long elapsed = (System.currentTimeMillis() - state.startTime) / 1000;
         res.addProperty("durationSec", elapsed);
-        res.addProperty("fileSize", state.getFileSize());
+        res.addProperty("packetCount", countPcapPackets(pcap));
+        res.addProperty("fileSize", Files.exists(pcap) ? Files.size(pcap) : 0);
         resp.getWriter().write(gson.toJson(res));
     }
 
@@ -166,12 +194,14 @@ public class WiresharkServlet extends HttpServlet {
         res.addProperty("status", "success");
         res.addProperty("running", running);
         res.addProperty("fileExists", fileExists);
-        if (state != null) {
+        res.addProperty("tshark", isTsharkAvailable());
+        if (running) {
             long elapsed = (System.currentTimeMillis() - state.startTime) / 1000;
             res.addProperty("durationSec", elapsed);
-            res.addProperty("packetCount", state.getPacketCount());
-            res.addProperty("fileSize", state.getFileSize());
+            res.addProperty("packetCount", countPcapPackets(pcap));
+            res.addProperty("fileSize", fileExists ? Files.size(pcap) : 0);
         } else if (fileExists) {
+            res.addProperty("packetCount", countPcapPackets(pcap));
             res.addProperty("fileSize", Files.size(pcap));
         }
         resp.getWriter().write(gson.toJson(res));
@@ -184,8 +214,17 @@ public class WiresharkServlet extends HttpServlet {
             return;
         }
 
-        String tsharkOut = exec("tshark", "-r", pcap.toString(), "-T", "json");
+        if (!isTsharkAvailable()) {
+            JsonObject res = new JsonObject();
+            res.addProperty("status", "success");
+            res.addProperty("tshark", false);
+            res.addProperty("packetCount", countPcapPackets(pcap));
+            res.add("packets", new JsonArray());
+            resp.getWriter().write(gson.toJson(res));
+            return;
+        }
 
+        String tsharkOut = exec("tshark", "-r", pcap.toString(), "-T", "json");
         JsonArray raw = new JsonArray();
         if (tsharkOut != null && !tsharkOut.isEmpty()) {
             try {
@@ -201,35 +240,76 @@ public class WiresharkServlet extends HttpServlet {
             JsonObject layers = src.getAsJsonObject("layers");
             if (layers == null) continue;
 
-            // time
             JsonObject frame = layers.getAsJsonObject("frame");
             if (frame != null) {
                 String rel = getFirst(frame, "frame.time_relative");
                 if (rel != null) pkt.addProperty("time", Double.parseDouble(rel));
             }
 
-            // IP
             JsonObject ip = layers.getAsJsonObject("ip");
             if (ip != null) {
                 pkt.addProperty("src", getFirst(ip, "ip.src"));
                 pkt.addProperty("dst", getFirst(ip, "ip.dst"));
             }
 
-            // SMPP
+            JsonObject tcp = layers.getAsJsonObject("tcp");
+            String srcPort = null, dstPort = null;
+            if (tcp != null) {
+                srcPort = getFirst(tcp, "tcp.srcport");
+                dstPort = getFirst(tcp, "tcp.dstport");
+            }
+
             JsonObject smpp = layers.getAsJsonObject("smpp");
+            JsonObject http = layers.getAsJsonObject("http");
+
             if (smpp != null) {
-                String cmd = getFirst(smpp, "smpp.command");
-                if (cmd != null) {
-                    String name = smppCommandName(cmd);
-                    pkt.addProperty("cmd", name);
-                    pkt.addProperty("cmdRaw", cmd);
+                pkt.addProperty("proto", "SMPP");
+                String cmdId = getFirst(smpp, "smpp.command_id");
+                if (cmdId != null) {
+                    pkt.addProperty("cmd", smppCommandName(cmdId));
+                    pkt.addProperty("cmdRaw", cmdId);
                 }
                 String srcAddr = getFirst(smpp, "smpp.source_addr");
                 if (srcAddr != null) pkt.addProperty("srcAddr", srcAddr);
                 String dstAddr = getFirst(smpp, "smpp.destination_addr");
                 if (dstAddr != null) pkt.addProperty("dstAddr", dstAddr);
-                String msg = getFirst(smpp, "smpp.short_message");
-                if (msg != null) pkt.addProperty("message", msg.length() > 80 ? msg.substring(0, 80) + "..." : msg);
+                String msg = getFirst(smpp, "smpp.message");
+                if (msg != null) {
+                    String decoded = decodeHexSMPPMessage(msg);
+                    if (decoded != null) pkt.addProperty("message", decoded.length() > 80 ? decoded.substring(0, 80) + "..." : decoded);
+                }
+                String msgId = getFirst(smpp, "smpp.message_id");
+                if (msgId != null) pkt.addProperty("detail", "msg_id=" + msgId);
+                String cmdStatus = getFirst(smpp, "smpp.command_status");
+                if (cmdStatus != null && !"0x00000000".equals(cmdStatus)) {
+                    pkt.addProperty("detail", (pkt.has("detail") ? pkt.get("detail").getAsString() + " " : "") + "status=" + cmdStatus);
+                }
+            } else if (http != null) {
+                pkt.addProperty("proto", "HTTP");
+                String method = getFirst(http, "http.request.method");
+                String uri = getFirst(http, "http.request.uri");
+                String code = getFirst(http, "http.response.code");
+                if (method != null && uri != null) {
+                    pkt.addProperty("cmd", method);
+                    pkt.addProperty("message", uri);
+                } else if (code != null) {
+                    pkt.addProperty("cmd", code);
+                    String reason = getFirst(http, "http.response.phrase");
+                    pkt.addProperty("message", reason != null ? reason : "");
+                }
+            } else {
+                if (srcPort != null && dstPort != null) {
+                    if ("8080".equals(srcPort) || "8080".equals(dstPort)) {
+                        pkt.addProperty("proto", "TCP:8080");
+                    } else if ("2776".equals(srcPort) || "2776".equals(dstPort)) {
+                        pkt.addProperty("proto", "SMPP(ctrl)");
+                    } else if ("12775".equals(srcPort) || "12775".equals(dstPort)) {
+                        pkt.addProperty("proto", "HTTP:12775");
+                    } else if ("5173".equals(srcPort) || "5173".equals(dstPort)) {
+                        pkt.addProperty("proto", "HTTP:5173");
+                    }
+                }
+                pkt.addProperty("cmd", "TCP");
             }
 
             packets.add(pkt);
@@ -237,8 +317,56 @@ public class WiresharkServlet extends HttpServlet {
 
         JsonObject res = new JsonObject();
         res.addProperty("status", "success");
+        res.addProperty("tshark", true);
         res.add("packets", packets);
         resp.getWriter().write(gson.toJson(res));
+    }
+
+    /** Launch native Wireshark GUI on the server with project traffic filter. */
+    private void handleLaunch(HttpServletResponse resp) throws IOException {
+        try {
+            String display = System.getenv("DISPLAY");
+            if (display == null || display.isEmpty()) {
+                resp.getWriter().write("{\"status\":\"error\",\"message\":\"No DISPLAY set — cannot launch GUI\"}");
+                return;
+            }
+            // Use sg to get wireshark group permissions for the capture child.
+            // dumpcap on this system has cap_net_admin,cap_net_raw=eip, so
+            // spawning it under the wireshark group via sg is sufficient.
+            ProcessBuilder pb = new ProcessBuilder(
+                "sg", "wireshark", "-c",
+                "nohup wireshark -i lo -f \"port 8080 or port 2776 or port 12775 or port 5173\" -k > /dev/null 2>&1 &"
+            );
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            pb.redirectError(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            pb.start();
+
+            JsonObject res = new JsonObject();
+            res.addProperty("status", "success");
+            res.addProperty("message", "Wireshark launched on lo (ports 8080, 2776, 12775, 5173)");
+            resp.getWriter().write(gson.toJson(res));
+        } catch (Exception e) {
+            resp.setStatus(500);
+            JsonObject err = new JsonObject();
+            err.addProperty("status", "error");
+            err.addProperty("message", "Failed to launch Wireshark: " + e.getMessage());
+            resp.getWriter().write(gson.toJson(err));
+        }
+    }
+
+    private static String decodeHexSMPPMessage(String hex) {
+        if (hex == null || hex.isEmpty()) return null;
+        try {
+            String[] parts = hex.split(":");
+            byte[] bytes = new byte[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                bytes[i] = (byte) Integer.parseInt(parts[i], 16);
+            }
+            return new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String getFirst(JsonObject obj, String key) {

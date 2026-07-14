@@ -49,7 +49,7 @@ smscsim (Docker)                   → Local SMPP SMSC simulator
 - Podman (or Docker) for SMPP simulator
 - PostgreSQL (NeonDB or local)
 
-### Local Dev
+### Single Terminal (Quickest)
 
 ```bash
 # 1. Start SMPP simulator
@@ -65,15 +65,44 @@ cd frontend && npm install && npm run build && cd ..
 mvn jetty:run
 ```
 
-Open http://localhost:8080
+Open http://localhost:8080. Requires rebuild + restart on frontend changes.
 
-### Docker (full stack)
+### Multi-Terminal (Hot-Reload, Recommended for Dev)
+
+```bash
+# Terminal 1: SMSC simulator
+podman-compose up -d smscsim
+
+# Terminal 2: Frontend dev server (hot-reload on .svelte changes)
+cd frontend && npm install && npm run dev -- --host
+# → http://localhost:5173, proxies API/WS to Jetty
+
+# Terminal 3: Backend
+mvn jetty:run
+```
+
+Edit `.svelte` files → browser auto-reloads in <1s. All API, WebSocket, and SMPP flows work identically.
+
+### Docker (Full Stack, Production-like)
 
 ```bash
 podman-compose --env-file .env up -d
 ```
 
-Set `APP_PROFILE=docker` in `.env` for container networking.
+Set `APP_PROFILE=docker` in `.env` for container networking (`smscsim` hostname instead of `localhost`).
+
+### IntelliJ IDEA (Debug Mode)
+
+```bash
+# Terminal: SMSC simulator
+podman-compose up -d smscsim
+```
+
+In IntelliJ: **Run → Edit Configurations → + → Maven** → Command line: `jetty:run`. Debug for breakpoints on servlets, SMPP handlers, WebSocket code.
+
+---
+
+> **Full walkthrough** with architecture diagrams, code tours, and per-feature test cases in `ONBOARDING.md` (local-only doc, `.gitignore`d).
 
 ### Verification
 

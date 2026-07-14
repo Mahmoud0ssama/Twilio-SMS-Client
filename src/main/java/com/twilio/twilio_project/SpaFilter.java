@@ -23,6 +23,7 @@ public class SpaFilter implements Filter {
                         || path.equals("/logout")
                         || path.startsWith("/admin/dashboard") || path.startsWith("/admin/customer")
                         || path.startsWith("/admin/smpp-logs")
+                        || path.startsWith("/admin/wireshark")
                         || path.startsWith("/api/chat/");
 
         if (!isGet) {

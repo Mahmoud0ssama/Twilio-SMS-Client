@@ -234,6 +234,7 @@
   let wsCapture = $state({ running: false, fileExists: false, durationSec: 0, packetCount: 0, fileSize: 0 });
   let wsPackets = $state([]);
   let wsError = $state('');
+  let wsTshark = $state(true);
 
   async function wsStart() {
     wsError = '';
@@ -261,6 +262,7 @@
       const res = await fetch('/admin/wireshark/status');
       const d = await res.json();
       if (d.status === 'success') {
+        wsTshark = d.tshark !== false;
         wsCapture = { running: d.running, fileExists: d.fileExists, durationSec: d.durationSec || 0, packetCount: d.packetCount || 0, fileSize: d.fileSize || 0 };
       }
     } catch (ignored) {}
@@ -270,12 +272,24 @@
     try {
       const res = await fetch('/admin/wireshark/packets');
       const d = await res.json();
-      if (d.status === 'success') wsPackets = d.packets || [];
+      if (d.status === 'success') {
+        wsPackets = d.packets || [];
+        if (d.tshark === false) wsTshark = false;
+      }
     } catch (ignored) {}
   }
 
   function wsDownload() {
     window.open('/admin/wireshark/download', '_blank');
+  }
+
+  async function wsLaunch() {
+    wsError = '';
+    try {
+      const res = await fetch('/admin/wireshark/launch', { method: 'POST' });
+      const d = await res.json();
+      if (d.status !== 'success') { wsError = d.message; return; }
+    } catch (e) { wsError = 'Failed to launch Wireshark'; }
   }
 
   let wsPollTimer;
@@ -533,36 +547,49 @@
           <button class="btn btn-secondary px-4" onclick={wsDownload} disabled={!wsCapture.fileExists}>
             <Download size={14} /> PCAP
           </button>
+          <button class="btn btn-secondary px-4" onclick={wsLaunch}>
+            <Wifi size={14} /> Open Wireshark
+          </button>
         </div>
       </div>
 
       <!-- Packet table -->
       <div class="overflow-y-auto flex-grow bg-black/30 rounded-xl p-4 font-mono text-xs">
-        {#if wsPackets.length === 0}
+        {#if !wsTshark}
           <div class="text-center text-base text-[var(--text-muted)] py-12">
-            {wsCapture.running ? 'Capturing… packets will appear when stopped.' : 'No packets captured. Start a capture and send SMPP traffic.'}
+            tshark not installed — packet view unavailable. Use <strong>Open Wireshark</strong> or download PCAP.
+          </div>
+        {:else if wsPackets.length === 0}
+          <div class="text-center text-base text-[var(--text-muted)] py-12">
+            {wsCapture.running ? 'Capturing… packets will appear when stopped.' : 'No packets captured. Start a capture and generate project traffic.'}
           </div>
         {:else}
           <table class="w-full">
             <thead>
               <tr class="text-[var(--text-muted)] uppercase tracking-wider text-left">
                 <th class="p-2">Time</th>
+                <th class="p-2">Proto</th>
                 <th class="p-2">Src</th>
                 <th class="p-2">Dst</th>
                 <th class="p-2">Command</th>
-                <th class="p-2">Src/Dst Addr</th>
-                <th class="p-2">Message</th>
+                <th class="p-2">Detail</th>
               </tr>
             </thead>
             <tbody>
               {#each wsPackets as pkt}
                 <tr class="border-b border-white/5 hover:bg-white/[0.03]">
                   <td class="p-2 text-[var(--text-muted)]">{pkt.time ? pkt.time.toFixed(3) : ''}</td>
-                  <td class="p-2 text-white">{pkt.src || ''}</td>
-                  <td class="p-2 text-white">{pkt.dst || ''}</td>
+                  <td class="p-2"><span class="px-1.5 py-0.5 rounded text-xs {pkt.proto === 'SMPP' ? 'bg-purple-900/50 text-purple-300' : 'bg-blue-900/50 text-blue-300'}">{pkt.proto || 'TCP'}</span></td>
+                  <td class="p-2 text-white text-xs">{pkt.src || ''}</td>
+                  <td class="p-2 text-white text-xs">{pkt.dst || ''}</td>
                   <td class="p-2 text-[var(--cyan)] font-semibold">{pkt.cmd || pkt.cmdRaw || ''}</td>
-                  <td class="p-2 text-[var(--text-secondary)]">{pkt.srcAddr || ''}{pkt.dstAddr ? ` → ${pkt.dstAddr}` : ''}</td>
-                  <td class="p-2 text-white/80 max-w-[200px] truncate">{pkt.message || ''}</td>
+                  <td class="p-2 text-white/80 max-w-[250px] truncate text-xs">
+                    {#if pkt.proto === 'SMPP'}
+                      {pkt.srcAddr || ''}{pkt.dstAddr ? ` → ${pkt.dstAddr}` : ''}
+                    {:else if pkt.message}
+                      {pkt.message}
+                    {/if}
+                  </td>
                 </tr>
               {/each}
             </tbody>

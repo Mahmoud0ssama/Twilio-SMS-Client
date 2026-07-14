@@ -134,8 +134,7 @@ public class ChatServlet extends HttpServlet {
         int userId = requireUserId(req, resp);
         if (userId < 0) return;
         HttpSession session = req.getSession(false);
-        String userRole = session != null ? (String) session.getAttribute("userRole") : "customer";
-        List<Map<String, Object>> users = UserRepository.findAllUsers(userId, userRole);
+        List<Map<String, Object>> users = UserRepository.findAllUsers(userId);
         json(resp, Map.of("status", "success", "users", users));
     }
 
