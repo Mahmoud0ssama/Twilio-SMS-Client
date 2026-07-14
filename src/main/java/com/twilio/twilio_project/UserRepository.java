@@ -252,51 +252,63 @@ public final class UserRepository {
         StringBuilder sql = new StringBuilder("UPDATE users SET ");
         List<Object> params = new ArrayList<>();
 
-        sql.append("full_name = ?, "); params.add(profile.get("fullName"));
-
-        if (profile.get("birthday") != null && !profile.get("birthday").isEmpty()) {
-            sql.append("birthday = ?::date, "); params.add(profile.get("birthday"));
-        } else {
-            sql.append("birthday = NULL, ");
+        if (profile.containsKey("fullName")) {
+            sql.append("full_name = ?, "); params.add(profile.get("fullName"));
         }
-
-        sql.append("msisdn = ?, "); params.add(profile.get("msisdn"));
-        sql.append("job = ?, "); params.add(profile.get("job"));
-        sql.append("email = ?, "); params.add(profile.get("email"));
-        sql.append("address = ?, "); params.add(profile.get("address"));
-        sql.append("twilio_account_sid = ?, "); params.add(profile.get("twilioSid"));
-        
-        // If password was edited, append it reactively
+        if (profile.containsKey("birthday")) {
+            String v = profile.get("birthday");
+            if (v != null && !v.isEmpty()) {
+                sql.append("birthday = ?::date, "); params.add(v);
+            } else {
+                sql.append("birthday = NULL, ");
+            }
+        }
+        if (profile.containsKey("msisdn")) {
+            sql.append("msisdn = ?, "); params.add(profile.get("msisdn"));
+        }
+        if (profile.containsKey("job")) {
+            sql.append("job = ?, "); params.add(profile.get("job"));
+        }
+        if (profile.containsKey("email")) {
+            sql.append("email = ?, "); params.add(profile.get("email"));
+        }
+        if (profile.containsKey("address")) {
+            sql.append("address = ?, "); params.add(profile.get("address"));
+        }
+        if (profile.containsKey("twilioSid")) {
+            sql.append("twilio_account_sid = ?, "); params.add(profile.get("twilioSid"));
+        }
         if (profile.containsKey("passwordHash") && profile.get("passwordHash") != null) {
             sql.append("password_hash = ?, "); params.add(profile.get("passwordHash"));
         }
-        
-        if (profile.get("twilioToken") != null && !profile.get("twilioToken").trim().isEmpty()) {
+        if (profile.containsKey("twilioToken") && profile.get("twilioToken") != null && !profile.get("twilioToken").trim().isEmpty()) {
             sql.append("twilio_auth_token = ?, "); params.add(profile.get("twilioToken"));
         }
-        
-        sql.append("twilio_sender_id = ?, "); params.add(profile.get("twilioSender"));
-
-        if (profile.get("smsProvider") != null && !profile.get("smsProvider").isEmpty()) {
+        if (profile.containsKey("twilioSender")) {
+            sql.append("twilio_sender_id = ?, "); params.add(profile.get("twilioSender"));
+        }
+        if (profile.containsKey("smsProvider")) {
             sql.append("sms_provider = ?, "); params.add(profile.get("smsProvider"));
         }
-        if (profile.get("smppHost") != null) {
+        if (profile.containsKey("smppHost")) {
             sql.append("smpp_host = ?, "); params.add(profile.get("smppHost"));
         }
-        if (profile.get("smppPort") != null && !profile.get("smppPort").isEmpty()) {
-            sql.append("smpp_port = ?, "); params.add(Integer.parseInt(profile.get("smppPort")));
+        if (profile.containsKey("smppPort")) {
+            String v = profile.get("smppPort");
+            if (v != null && !v.isEmpty()) {
+                sql.append("smpp_port = ?, "); params.add(Integer.parseInt(v));
+            }
         }
-        if (profile.get("smppSystemId") != null) {
+        if (profile.containsKey("smppSystemId")) {
             sql.append("smpp_system_id = ?, "); params.add(profile.get("smppSystemId"));
         }
-        if (profile.get("smppPassword") != null) {
+        if (profile.containsKey("smppPassword")) {
             sql.append("smpp_password = ?, "); params.add(profile.get("smppPassword"));
         }
-        if (profile.get("smppAddressRange") != null) {
+        if (profile.containsKey("smppAddressRange")) {
             sql.append("smpp_address_range = ?, "); params.add(profile.get("smppAddressRange"));
         }
 
-        // Remove trailing comma+space
         int len = sql.length();
         if (sql.charAt(len - 2) == ',') {
             sql.setLength(len - 2);

@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import AdminCustomerView from './AdminCustomerView.svelte';
-  import { Users, MessageCircle, UserPlus, LogOut, Pencil, Trash2, Send } from 'lucide-svelte';
+  import { Users, MessageCircle, UserPlus, LogOut, Pencil, Trash2, Send, Terminal } from 'lucide-svelte';
 
   let { onLogout } = $props();
 
@@ -151,6 +151,51 @@
     } catch (ignored) {}
   }
 
+  // SMPP logs
+  let showSmppLogs = $state(false);
+  let smppLogs = $state([]);
+  let smppLogError = $state('');
+
+  async function fetchSmppLogs() {
+    if (!showSmppLogs) return;
+    try {
+      const res = await fetch('/admin/smpp-logs');
+      if (res.ok) {
+        const d = await res.json();
+        smppLogs = d.logs || [];
+        smppLogError = '';
+      }
+    } catch (err) {
+      smppLogError = 'Failed to fetch SMPP logs';
+    }
+  }
+
+  function smppTime(ts) {
+    return ts.slice(0, 23).replace('T', ' ');
+  }
+
+  function smppDetail(detail) {
+    if (detail.length > 180) return detail.slice(0, 180) + '…';
+    return detail;
+  }
+
+  let smppPollTimer;
+  function toggleSmppLogs() {
+    showSmppLogs = !showSmppLogs;
+    if (showSmppLogs) {
+      fetchSmppLogs();
+      smppPollTimer = setInterval(fetchSmppLogs, 3000);
+    } else {
+      clearInterval(smppPollTimer);
+    }
+  }
+
+  function smppLogLevelClass(level) {
+    if (level === 'ERROR') return 'text-[var(--red)]';
+    if (level === 'WARN') return 'text-[var(--yellow)]';
+    return 'text-[var(--emerald)]';
+  }
+
   // Broadcast modal
   let showBroadcast = $state(false);
   let broadcastMsg = $state('');
@@ -196,6 +241,10 @@
       </div>
       
       <div class="flex items-center gap-3">
+        <button class="btn btn-secondary" onclick={toggleSmppLogs}>
+          <Terminal size={14} />
+          SMPP Logs
+        </button>
         <button class="btn btn-secondary" onclick={() => showBroadcast = true}>
           <Send size={14} />
           Broadcast
@@ -323,27 +372,29 @@
 {#if smsModal.open}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onkeydown={(e) => e.key === 'Escape' && (smsModal.open = false)}>
-    <div class="card-glass w-full max-w-[700px] p-6 animate-fade max-h-[80vh] flex flex-col" role="dialog" aria-modal="true" aria-label="SMS History">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-bold text-lg text-white">SMS History — {smsModal.customerName}</h3>
-        <button class="text-white/40 hover:text-white" onclick={() => smsModal.open = false}>✕</button>
+    <div class="card-glass w-full max-w-[900px] p-8 animate-fade max-h-[85vh] flex flex-col" role="dialog" aria-modal="true" aria-label="SMS History">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="font-bold text-xl text-white">SMS History — {smsModal.customerName}</h3>
+        <button class="text-white/40 hover:text-white text-lg" onclick={() => smsModal.open = false}>✕</button>
       </div>
-      <div class="overflow-y-auto flex-grow space-y-3">
+      <div class="overflow-y-auto flex-grow space-y-5">
         {#if smsModal.outbound.length === 0 && smsModal.inbound.length === 0}
-          <div class="text-center text-sm text-[var(--text-muted)] py-8">No SMS messages yet.</div>
+          <div class="text-center text-sm text-[var(--text-muted)] py-12">No SMS messages yet.</div>
         {:else}
           {#each [...smsModal.outbound, ...smsModal.inbound].sort((a, b) => new Date(a.sentAt || a.createdAt) - new Date(b.sentAt || b.createdAt)) as sms}
-            <div class="p-3 rounded-lg {sms.recipient ? 'bg-[var(--cyan)]/10 border-l-2 border-[var(--cyan)]' : 'bg-[var(--emerald)]/10 border-l-2 border-[var(--emerald)]'}">
-              <div class="flex justify-between text-xs text-[var(--text-muted)] mb-1">
-                <span class="font-bold uppercase">{sms.recipient ? 'OUTBOUND' : 'INBOUND'}</span>
+            <div class="p-5 rounded-xl border {sms.recipient
+                ? 'bg-[var(--cyan)]/10 border-[var(--cyan)]/30 border-l-[3px]'
+                : 'bg-[var(--emerald)]/10 border-[var(--emerald)]/30 border-l-[3px]'}">
+              <div class="flex justify-between text-sm text-[var(--text-muted)] mb-2">
+                <span class="font-bold uppercase tracking-wider">{sms.recipient ? 'OUTBOUND' : 'INBOUND'}</span>
                 <span>{new Date(sms.sentAt || sms.createdAt).toLocaleString()}</span>
               </div>
-              <div class="text-sm text-white">{sms.message}</div>
-              <div class="flex gap-3 mt-1 text-xs text-[var(--text-secondary)]">
+              <div class="text-base text-white leading-relaxed">{sms.message}</div>
+              <div class="flex gap-4 mt-2 text-sm text-[var(--text-secondary)]">
                 {#if sms.recipient}
-                  <span>To: <span class="font-mono">{sms.recipient}</span></span>
+                  <span>To: <span class="font-mono font-bold text-[var(--cyan)]">{sms.recipient}</span></span>
                 {:else}
-                  <span>From: <span class="font-mono">{sms.from}</span></span>
+                  <span>From: <span class="font-mono font-bold text-[var(--emerald)]">{sms.from}</span></span>
                 {/if}
                 <span class="capitalize">Status: <span class="font-bold {sms.status === 'delivered' ? 'text-[var(--emerald)]' : 'text-[var(--red)]'}">{sms.status}</span></span>
               </div>
@@ -351,8 +402,8 @@
           {/each}
         {/if}
       </div>
-      <div class="flex justify-end border-t border-[var(--border)] pt-4 mt-4">
-        <button class="btn btn-secondary px-4" onclick={() => smsModal.open = false}>Close</button>
+      <div class="flex justify-end border-t border-[var(--border)] pt-5 mt-5">
+        <button class="btn btn-secondary px-6 py-2" onclick={() => smsModal.open = false}>Close</button>
       </div>
     </div>
   </div>
@@ -369,6 +420,45 @@
 {#if loadingProfile}
   <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
     <div class="text-white font-bold animate-pulse">Loading Customer Profile...</div>
+  </div>
+{/if}
+
+<!-- Modal: SMPP Logs -->
+{#if showSmppLogs}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6" onkeydown={(e) => e.key === 'Escape' && toggleSmppLogs()}>
+    <div class="card-glass w-full max-w-[1000px] p-8 animate-fade max-h-[85vh] flex flex-col" role="dialog" aria-modal="true" aria-label="SMPP Logs">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="font-bold text-xl text-white flex items-center gap-3">
+          <Terminal size={22} class="text-[var(--cyan)]" />
+          SMPP Session Logs
+        </h3>
+        <button class="text-white/40 hover:text-white text-lg" onclick={toggleSmppLogs}>✕</button>
+      </div>
+
+      {#if smppLogError}
+        <div class="error-msg mb-4">{smppLogError}</div>
+      {/if}
+
+      <div class="overflow-y-auto flex-grow space-y-2 bg-black/30 rounded-xl p-5 font-mono text-sm">
+        {#if smppLogs.length === 0}
+          <div class="text-center text-base text-[var(--text-muted)] py-12">No SMPP events yet. Send an SMS or trigger MO.</div>
+        {:else}
+          {#each smppLogs as log}
+            <div class="flex gap-3 py-2 px-3 border-b border-white/5 last:border-0 hover:bg-white/[0.03] rounded items-start">
+              <span class="text-[var(--text-muted)] w-[22ch] shrink-0 text-xs leading-5">{smppTime(log.timestamp)}</span>
+              <span class="w-[7ch] shrink-0 font-bold uppercase text-sm {smppLogLevelClass(log.level)}">{log.level}</span>
+              <span class="w-[9ch] shrink-0 text-[var(--cyan)] font-semibold text-sm">{log.event}</span>
+              <span class="text-white/80 leading-5 break-words min-w-0">{smppDetail(log.detail)}</span>
+            </div>
+          {/each}
+        {/if}
+      </div>
+      <div class="flex justify-between items-center border-t border-[var(--border)] pt-5 mt-5">
+        <span class="text-sm text-[var(--text-muted)]">Auto-refreshes every 3s · {smppLogs.length} entries</span>
+        <button class="btn btn-secondary px-6" onclick={toggleSmppLogs}>Close</button>
+      </div>
+    </div>
   </div>
 {/if}
 

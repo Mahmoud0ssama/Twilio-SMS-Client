@@ -22,6 +22,7 @@ public class SpaFilter implements Filter {
         boolean isApiGet = path.equals("/profile") || path.equals("/dashboard")
                         || path.equals("/logout")
                         || path.startsWith("/admin/dashboard") || path.startsWith("/admin/customer")
+                        || path.startsWith("/admin/smpp-logs")
                         || path.startsWith("/api/chat/");
 
         if (!isGet) {

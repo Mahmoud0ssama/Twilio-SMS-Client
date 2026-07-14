@@ -59,11 +59,16 @@ public class SmppSessionManager {
                 try {
                     byte esmClass = deliverSm.getEsmClass();
                     if (esmClass == 4) {
+                        SmpEventLogger.log("INFO", "DLR", "From " + deliverSm.getSourceAddr()
+                            + " " + new String(deliverSm.getShortMessage(), java.nio.charset.StandardCharsets.ISO_8859_1));
                         handleDeliveryReceipt(deliverSm);
                     } else {
+                        SmpEventLogger.log("INFO", "MO", "From " + deliverSm.getSourceAddr()
+                            + " to " + deliverSm.getDestAddress());
                         handleInboundMessage(deliverSm);
                     }
                 } catch (Exception e) {
+                    SmpEventLogger.log("ERROR", "DELIVER_SM", e.getMessage());
                     log.error("Error processing DELIVER_SM: {}", e.getMessage());
                 }
             }
@@ -83,6 +88,7 @@ public class SmppSessionManager {
                         TypeOfNumber.UNKNOWN, NumberingPlanIndicator.UNKNOWN, cfg.addressRange != null ? cfg.addressRange : ""));
         sessions.put(key, session);
         log.info("SMPP session bound to {} ({})", key, session.getSessionState());
+        SmpEventLogger.log("INFO", "BIND", "Bound to " + key + " state=" + session.getSessionState());
         return session;
     }
 
@@ -150,8 +156,10 @@ public class SmppSessionManager {
                     (byte) 0,
                     message.getBytes()
             );
+            SmpEventLogger.log("INFO", "SUBMIT", "To " + to + " msgId=" + result.getMessageId());
             return result.getMessageId();
         } catch (Exception e) {
+            SmpEventLogger.log("ERROR", "SUBMIT", "To " + to + ": " + e.getMessage());
             throw new IOException("SMPP submit failed: " + e.getMessage(), e);
         }
     }
