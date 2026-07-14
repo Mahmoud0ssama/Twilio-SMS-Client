@@ -12,8 +12,9 @@ services:
       retries: 3
       start_period: 15s
 
-  restcomm:
-    image: restcomm/smpp-simulator
+  smscsim:
+    image: localhost/smscsim-fixed:latest
     ports:
-      - "2776:2776"
+      - "2776:2775"
+      - "12775:12775"
     restart: unless-stopped

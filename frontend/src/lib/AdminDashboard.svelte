@@ -43,6 +43,9 @@
 
   onMount(() => {
     fetchDashboard();
+    fetchBroadcasts();
+    const iv = setInterval(fetchBroadcasts, 30000);
+    return () => clearInterval(iv);
   });
 
   async function handleOpenEdit(cust) {
@@ -113,6 +116,39 @@
   function getSmsCount(custId) {
     const stat = stats.find(s => s.userId === custId);
     return stat ? stat.sentCount : 0;
+  }
+
+  // Broadcast history
+  let broadcasts = $state([]);
+
+  async function fetchBroadcasts() {
+    try {
+      const res = await fetch('/api/chat/system?limit=100');
+      if (res.ok) {
+        const d = await res.json();
+        broadcasts = (d.messages || []).reverse();
+      }
+    } catch (ignored) {}
+  }
+
+  // SMS history modal
+  let smsModal = $state({ open: false, customerName: '', outbound: [], inbound: [] });
+
+  async function openSmsHistory(cust) {
+    try {
+      const res = await fetch(`/admin/customer?id=${cust.id}&action=sms_history`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d.status === 'success') {
+          smsModal = {
+            open: true,
+            customerName: cust.fullName || cust.username,
+            outbound: d.outboundHistory || [],
+            inbound: d.inboundHistory || []
+          };
+        }
+      }
+    } catch (ignored) {}
   }
 
   // Broadcast modal
@@ -237,18 +273,22 @@
                     <td class="text-xs text-[var(--text-muted)]">
                       {new Date(cust.createdAt).toLocaleDateString()}
                     </td>
-                    <td>
-                      <div class="flex gap-2">
-                        <button class="btn btn-secondary px-3 py-1 text-xs" onclick={() => handleOpenEdit(cust)}>
-                          <Pencil size={12} />
-                          Edit
-                        </button>
-                        <button class="btn btn-danger px-3 py-1 text-xs" onclick={() => handleDelete(cust.id)}>
-                          <Trash2 size={12} />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+                      <td>
+                        <div class="flex gap-2">
+                          <button class="btn btn-secondary px-3 py-1 text-xs" onclick={() => handleOpenEdit(cust)}>
+                            <Pencil size={12} />
+                            Edit
+                          </button>
+                          <button class="btn btn-secondary px-3 py-1 text-xs" onclick={() => openSmsHistory(cust)}>
+                            <MessageCircle size={12} />
+                            SMS
+                          </button>
+                          <button class="btn btn-danger px-3 py-1 text-xs" onclick={() => handleDelete(cust.id)}>
+                            <Trash2 size={12} />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
                   </tr>
                 {/each}
               </tbody>
@@ -256,9 +296,67 @@
           </div>
         {/if}
       </div>
+
+      <!-- Broadcasts Section -->
+      <div class="card-glass p-6 text-left mb-6">
+        <h2 class="text-xl font-bold text-white mb-4">Broadcasts</h2>
+        <div class="flex-grow overflow-y-auto flex flex-col gap-3 max-h-[400px] bg-black/20 rounded-lg p-4">
+          {#if broadcasts.length === 0}
+            <div class="text-center text-sm text-[var(--text-muted)]">No broadcasts sent yet.</div>
+          {:else}
+            {#each broadcasts as msg}
+              <div class="message-bubble inbound">
+                <div class="msg-text"><span class="font-bold text-[var(--yellow)]">📢 Broadcast:</span> {msg.content}</div>
+                <div class="msg-meta">
+                  <span>{new Date(msg.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
     {/if}
   </div>
 </div>
+
+<!-- SMS History Modal -->
+{#if smsModal.open}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onkeydown={(e) => e.key === 'Escape' && (smsModal.open = false)}>
+    <div class="card-glass w-full max-w-[700px] p-6 animate-fade max-h-[80vh] flex flex-col" role="dialog" aria-modal="true" aria-label="SMS History">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-lg text-white">SMS History — {smsModal.customerName}</h3>
+        <button class="text-white/40 hover:text-white" onclick={() => smsModal.open = false}>✕</button>
+      </div>
+      <div class="overflow-y-auto flex-grow space-y-3">
+        {#if smsModal.outbound.length === 0 && smsModal.inbound.length === 0}
+          <div class="text-center text-sm text-[var(--text-muted)] py-8">No SMS messages yet.</div>
+        {:else}
+          {#each [...smsModal.outbound, ...smsModal.inbound].sort((a, b) => new Date(a.sentAt || a.createdAt) - new Date(b.sentAt || b.createdAt)) as sms}
+            <div class="p-3 rounded-lg {sms.recipient ? 'bg-[var(--cyan)]/10 border-l-2 border-[var(--cyan)]' : 'bg-[var(--emerald)]/10 border-l-2 border-[var(--emerald)]'}">
+              <div class="flex justify-between text-xs text-[var(--text-muted)] mb-1">
+                <span class="font-bold uppercase">{sms.recipient ? 'OUTBOUND' : 'INBOUND'}</span>
+                <span>{new Date(sms.sentAt || sms.createdAt).toLocaleString()}</span>
+              </div>
+              <div class="text-sm text-white">{sms.message}</div>
+              <div class="flex gap-3 mt-1 text-xs text-[var(--text-secondary)]">
+                {#if sms.recipient}
+                  <span>To: <span class="font-mono">{sms.recipient}</span></span>
+                {:else}
+                  <span>From: <span class="font-mono">{sms.from}</span></span>
+                {/if}
+                <span class="capitalize">Status: <span class="font-bold {sms.status === 'delivered' ? 'text-[var(--emerald)]' : 'text-[var(--red)]'}">{sms.status}</span></span>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+      <div class="flex justify-end border-t border-[var(--border)] pt-4 mt-4">
+        <button class="btn btn-secondary px-4" onclick={() => smsModal.open = false}>Close</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Modal: Customer Create/Edit -->
 <AdminCustomerView

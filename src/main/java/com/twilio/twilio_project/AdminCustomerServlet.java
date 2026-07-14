@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @WebServlet(name = "adminCustomerServlet", value = "/admin/customer")
@@ -41,8 +42,27 @@ public class AdminCustomerServlet extends HttpServlet {
             return;
         }
 
-        // Support customer deletion triggered by Svelte's GET fetch action
         String action = request.getParameter("action");
+
+        // Fetch customer SMS history
+        if ("sms_history".equals(action)) {
+            try {
+                int id = Integer.parseInt(idStr.trim());
+                List<Map<String, Object>> outbound = UserRepository.findSmsHistoryByUserId(id);
+                List<Map<String, Object>> inbound = UserRepository.findInboundSmsByUserId(id);
+                JsonObject data = new JsonObject();
+                data.addProperty("status", "success");
+                data.add("outboundHistory", gson.toJsonTree(outbound));
+                data.add("inboundHistory", gson.toJsonTree(inbound));
+                response.getWriter().write(gson.toJson(data));
+            } catch (Exception e) {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                response.getWriter().write("{\"status\":\"error\"}");
+            }
+            return;
+        }
+
+        // Support customer deletion triggered by Svelte's GET fetch action
         if ("delete".equals(action)) {
             try {
                 int id = Integer.parseInt(idStr.trim());
@@ -204,6 +224,7 @@ public class AdminCustomerServlet extends HttpServlet {
                 if (!smppAddressRange.isEmpty()) profile.put("smppAddressRange", smppAddressRange);
 
                 UserRepository.updateUserProfile(userId, profile);
+
                 response.getWriter().write("{\"status\":\"success\"}");
             }
 

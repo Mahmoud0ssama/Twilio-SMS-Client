@@ -99,11 +99,23 @@ public class SmppSessionManager {
         }
     }
 
+    private static String decodeShortMessage(byte[] msgBytes, byte dataCoding) {
+        try {
+            return switch (dataCoding) {
+                case 0x08 -> new String(msgBytes, "UTF-16BE");
+                default -> new String(msgBytes, "UTF-8");
+            };
+        } catch (Exception e) {
+            return new String(msgBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        }
+    }
+
     private static void handleInboundMessage(DeliverSm deliverSm) {
         try {
             String from = deliverSm.getSourceAddr();
             String to = deliverSm.getDestAddress();
-            String message = new String(deliverSm.getShortMessage(), "UTF-8");
+            byte[] msgBytes = deliverSm.getShortMessage();
+            String message = decodeShortMessage(msgBytes, deliverSm.getDataCoding());
             int userId = UserRepository.findUserIdByPhone(to);
             if (userId > 0) {
                 UserRepository.saveInboundSms(userId, from, to, message);
@@ -111,8 +123,6 @@ public class SmppSessionManager {
             } else {
                 log.warn("No user found for inbound SMS to {}", to);
             }
-        } catch (SQLException e) {
-            log.warn("DB error storing inbound SMS: {}", e.getMessage());
         } catch (Exception e) {
             log.warn("Failed to process inbound SMS: {}", e.getMessage());
         }

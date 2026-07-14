@@ -6,12 +6,11 @@ build/
 .DS_Store
 ### Eclipse ###
 .env
+.env.docker
 ### Environment ###
 .factorypath
-.idea/compiler.xml
-.idea/jarRepositories.xml
-.idea/libraries/
-.idea/modules.xml
+.idea/*
+!.idea/runConfigurations/
 *.iml
 ### IntelliJ IDEA ###
 *.ipr
@@ -35,5 +34,6 @@ build/
 studying/
 users.csv
 target/
+.env.local
 .vscode/
 ### VS Code ###

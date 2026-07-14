@@ -6,7 +6,9 @@
         <MavenRunnerSettings>
           <option name="delegateBuildToMaven" value="false" />
           <option name="environmentProperties">
-            <map />
+            <map>
+              <entry key="ENV_FILE" value=".env.local" />
+            </map>
           </option>
           <option name="jreName" value="21" />
           <option name="mavenProperties">

@@ -3,13 +3,21 @@ package com.twilio.twilio_project;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.flywaydb.core.Flyway;
+import org.postgresql.Driver;
+
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DBUtil {
     private static final HikariDataSource dataSource;
 
     static {
+        // Explicitly register PostgreSQL driver to ensure it's available
+        try {
+            DriverManager.registerDriver(new Driver());
+        } catch (SQLException ignored) {}
+
         String dbUrl = EnvLoader.get("DB_URL");
         String dbUser = EnvLoader.get("DB_USER");
         String dbPassword = EnvLoader.get("DB_PASSWORD");
