@@ -261,6 +261,7 @@ public class WiresharkServlet extends HttpServlet {
 
             JsonObject smpp = layers.getAsJsonObject("smpp");
             JsonObject http = layers.getAsJsonObject("http");
+            JsonObject json = layers.getAsJsonObject("json");
 
             if (smpp != null) {
                 pkt.addProperty("proto", "SMPP");
@@ -290,8 +291,11 @@ public class WiresharkServlet extends HttpServlet {
                 String uri = getFirst(http, "http.request.uri");
                 String code = getFirst(http, "http.response.code");
                 if (method != null && uri != null) {
-                    pkt.addProperty("cmd", method);
-                    pkt.addProperty("message", uri);
+                    pkt.addProperty("cmd", method + " " + uri);
+                    if (json != null) {
+                        String jbody = getFirst(json, "json.object");
+                        if (jbody != null) pkt.addProperty("message", jbody.length() > 120 ? jbody.substring(0, 120) + "..." : jbody);
+                    }
                 } else if (code != null) {
                     pkt.addProperty("cmd", code);
                     String reason = getFirst(http, "http.response.phrase");

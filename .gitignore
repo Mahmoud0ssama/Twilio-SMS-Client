@@ -32,6 +32,7 @@ build/
 !**/src/test/**/target/
 .sts4-cache
 studying/
+learn/
 users.csv
 target/
 .env.local
