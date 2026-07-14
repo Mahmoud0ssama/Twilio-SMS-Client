@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import AdminCustomerView from './AdminCustomerView.svelte';
-  import { Users, MessageCircle, UserPlus, LogOut, Pencil, Trash2, Send, Terminal } from 'lucide-svelte';
+  import { Users, MessageCircle, UserPlus, LogOut, Pencil, Trash2, Send, Terminal, Wifi, Download } from 'lucide-svelte';
 
   let { onLogout } = $props();
 
@@ -228,6 +228,69 @@
       broadcastSending = false;
     }
   }
+
+  // Wireshark capture
+  let showWireshark = $state(false);
+  let wsCapture = $state({ running: false, fileExists: false, durationSec: 0, packetCount: 0, fileSize: 0 });
+  let wsPackets = $state([]);
+  let wsError = $state('');
+
+  async function wsStart() {
+    wsError = '';
+    try {
+      const res = await fetch('/admin/wireshark/start', { method: 'POST' });
+      const d = await res.json();
+      if (d.status !== 'success') { wsError = d.message; return; }
+      await wsFetchStatus();
+    } catch (e) { wsError = 'Failed to start capture'; }
+  }
+
+  async function wsStop() {
+    wsError = '';
+    try {
+      const res = await fetch('/admin/wireshark/stop', { method: 'POST' });
+      const d = await res.json();
+      if (d.status !== 'success') { wsError = d.message; return; }
+      wsCapture = { ...wsCapture, running: false, fileSize: d.fileSize || 0, durationSec: d.durationSec || 0 };
+      await wsFetchPackets();
+    } catch (e) { wsError = 'Failed to stop capture'; }
+  }
+
+  async function wsFetchStatus() {
+    try {
+      const res = await fetch('/admin/wireshark/status');
+      const d = await res.json();
+      if (d.status === 'success') {
+        wsCapture = { running: d.running, fileExists: d.fileExists, durationSec: d.durationSec || 0, packetCount: d.packetCount || 0, fileSize: d.fileSize || 0 };
+      }
+    } catch (ignored) {}
+  }
+
+  async function wsFetchPackets() {
+    try {
+      const res = await fetch('/admin/wireshark/packets');
+      const d = await res.json();
+      if (d.status === 'success') wsPackets = d.packets || [];
+    } catch (ignored) {}
+  }
+
+  function wsDownload() {
+    window.open('/admin/wireshark/download', '_blank');
+  }
+
+  let wsPollTimer;
+  function toggleWireshark() {
+    showWireshark = !showWireshark;
+    if (showWireshark) {
+      wsFetchStatus();
+      wsPollTimer = setInterval(() => {
+        wsFetchStatus();
+        if (!wsCapture.running) wsFetchPackets();
+      }, 2000);
+    } else {
+      clearInterval(wsPollTimer);
+    }
+  }
 </script>
 
 <div class="app-canvas min-h-screen">
@@ -241,6 +304,10 @@
       </div>
       
       <div class="flex items-center gap-3">
+        <button class="btn btn-secondary" onclick={toggleWireshark}>
+          <Wifi size={14} />
+          Wireshark
+        </button>
         <button class="btn btn-secondary" onclick={toggleSmppLogs}>
           <Terminal size={14} />
           SMPP Logs
@@ -420,6 +487,94 @@
 {#if loadingProfile}
   <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
     <div class="text-white font-bold animate-pulse">Loading Customer Profile...</div>
+  </div>
+{/if}
+
+<!-- Modal: Wireshark Capture -->
+{#if showWireshark}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6" onkeydown={(e) => e.key === 'Escape' && toggleWireshark()}>
+    <div class="card-glass w-full max-w-[1100px] p-8 animate-fade max-h-[90vh] flex flex-col" role="dialog" aria-modal="true" aria-label="Wireshark Capture">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="font-bold text-xl text-white flex items-center gap-3">
+          <Wifi size={22} class="text-[var(--cyan)]" />
+          Wireshark Packet Capture
+        </h3>
+        <button class="text-white/40 hover:text-white text-lg" onclick={toggleWireshark}>✕</button>
+      </div>
+
+      {#if wsError}
+        <div class="error-msg mb-4">{wsError}</div>
+      {/if}
+
+      <!-- Controls -->
+      <div class="flex items-center gap-4 mb-4 p-4 bg-black/30 rounded-xl">
+        <span class="text-sm text-[var(--text-secondary)]">Status:
+          <span class="font-bold {wsCapture.running ? 'text-[var(--emerald)]' : 'text-[var(--text-muted)]'}">{wsCapture.running ? 'Capturing' : 'Stopped'}</span>
+        </span>
+        {#if wsCapture.durationSec > 0}
+          <span class="text-sm text-[var(--text-secondary)]">Duration: <span class="font-bold text-white">{wsCapture.durationSec}s</span></span>
+        {/if}
+        <span class="text-sm text-[var(--text-secondary)]">Packets: <span class="font-bold text-white">{wsCapture.packetCount}</span></span>
+        {#if wsCapture.fileSize > 0}
+          <span class="text-sm text-[var(--text-secondary)]">File: <span class="font-bold text-white">{(wsCapture.fileSize / 1024).toFixed(1)}KB</span></span>
+        {/if}
+
+        <div class="flex gap-2 ml-auto">
+          {#if !wsCapture.running}
+            <button class="btn btn-primary px-4" onclick={wsStart}>
+              <Wifi size={14} /> Start Capture
+            </button>
+          {:else}
+            <button class="btn btn-danger px-4" onclick={wsStop}>
+              <Wifi size={14} /> Stop
+            </button>
+          {/if}
+          <button class="btn btn-secondary px-4" onclick={wsDownload} disabled={!wsCapture.fileExists}>
+            <Download size={14} /> PCAP
+          </button>
+        </div>
+      </div>
+
+      <!-- Packet table -->
+      <div class="overflow-y-auto flex-grow bg-black/30 rounded-xl p-4 font-mono text-xs">
+        {#if wsPackets.length === 0}
+          <div class="text-center text-base text-[var(--text-muted)] py-12">
+            {wsCapture.running ? 'Capturing… packets will appear when stopped.' : 'No packets captured. Start a capture and send SMPP traffic.'}
+          </div>
+        {:else}
+          <table class="w-full">
+            <thead>
+              <tr class="text-[var(--text-muted)] uppercase tracking-wider text-left">
+                <th class="p-2">Time</th>
+                <th class="p-2">Src</th>
+                <th class="p-2">Dst</th>
+                <th class="p-2">Command</th>
+                <th class="p-2">Src/Dst Addr</th>
+                <th class="p-2">Message</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each wsPackets as pkt}
+                <tr class="border-b border-white/5 hover:bg-white/[0.03]">
+                  <td class="p-2 text-[var(--text-muted)]">{pkt.time ? pkt.time.toFixed(3) : ''}</td>
+                  <td class="p-2 text-white">{pkt.src || ''}</td>
+                  <td class="p-2 text-white">{pkt.dst || ''}</td>
+                  <td class="p-2 text-[var(--cyan)] font-semibold">{pkt.cmd || pkt.cmdRaw || ''}</td>
+                  <td class="p-2 text-[var(--text-secondary)]">{pkt.srcAddr || ''}{pkt.dstAddr ? ` → ${pkt.dstAddr}` : ''}</td>
+                  <td class="p-2 text-white/80 max-w-[200px] truncate">{pkt.message || ''}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
+      </div>
+
+      <div class="flex justify-between items-center border-t border-[var(--border)] pt-5 mt-5">
+        <span class="text-sm text-[var(--text-muted)]">Auto-refreshes every 2s · {wsPackets.length} packets</span>
+        <button class="btn btn-secondary px-6" onclick={toggleWireshark}>Close</button>
+      </div>
+    </div>
   </div>
 {/if}
 

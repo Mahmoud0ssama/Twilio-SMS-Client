@@ -133,7 +133,9 @@ public class ChatServlet extends HttpServlet {
     private void handleUsers(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         int userId = requireUserId(req, resp);
         if (userId < 0) return;
-        List<Map<String, Object>> users = UserRepository.findAllUsers(userId);
+        HttpSession session = req.getSession(false);
+        String userRole = session != null ? (String) session.getAttribute("userRole") : "customer";
+        List<Map<String, Object>> users = UserRepository.findAllUsers(userId, userRole);
         json(resp, Map.of("status", "success", "users", users));
     }
 
