@@ -13,7 +13,7 @@
 
 Dual-provider SMS platform — **Twilio** and **SMPP** with per-user provider routing, real-time internal chat, admin broadcast, and profile-based environment configuration.
 
-> **New to the project?** See the [ONBOARDING.md](ONBOARDING.md) guide for architecture deep-dive, code walkthrough, testing guide, and troubleshooting.
+
 
 ## Architecture
 
