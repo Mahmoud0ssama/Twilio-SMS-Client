@@ -32,7 +32,8 @@ build/
 !**/src/test/**/build/
 !**/src/test/**/target/
 .sts4-cache
-studying/users.csv
+studying/
+users.csv
 target/
 .vscode/
 ### VS Code ###

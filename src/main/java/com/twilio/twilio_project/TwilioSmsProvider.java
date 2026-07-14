@@ -4,9 +4,8 @@ import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
 
-public class TwilioSmsProvider implements SmsProvider {
+public class TwilioSmsProvider {
 
-    @Override
     public SmsResult send(String to, String message, String from) {
         try {
             // These are passed per-call — caller must init Twilio with proper creds
@@ -15,10 +14,5 @@ public class TwilioSmsProvider implements SmsProvider {
         } catch (Exception e) {
             return new SmsResult(false, "Twilio error: " + e.getMessage());
         }
-    }
-
-    @Override
-    public SmsProviderType getType() {
-        return SmsProviderType.TWILIO;
     }
 }
