@@ -1,89 +1,96 @@
 <script>
-  import svelteLogo from './assets/svelte.svg'
-  import viteLogo from './assets/vite.svg'
-  import heroImg from './assets/hero.png'
-  import Counter from './lib/Counter.svelte'
+  import { onMount } from 'svelte';
+  import LoginView from './lib/LoginView.svelte';
+  import RegisterView from './lib/RegisterView.svelte';
+  import VerifyMsisdnView from './lib/VerifyMsisdnView.svelte';
+  import CustomerDashboard from './lib/CustomerDashboard.svelte';
+  import AdminDashboard from './lib/AdminDashboard.svelte';
+
+  // SPA Route State
+  let currentView = $state('login'); // login, register, verify-msisdn, customer-dashboard, admin-dashboard
+  let userRole = $state('');
+  let userId = $state(null);
+  let verifyingSession = $state(true);
+
+  async function checkSession() {
+    try {
+      // Fetch profile to see if session is active
+      const res = await fetch('/profile');
+      if (res.ok) {
+        const data = await res.json();
+        // Since we are authenticated, determine role
+        // Wait, does /profile return role? Let's check:
+        // Actually, let's fetch /dashboard to see if we can login as customer, 
+        // or check /admin/dashboard to see if we are admin.
+        // Even simpler: we can try to fetch /dashboard first. If it succeeds, it's a customer.
+        // If it fails with 403, we can check if we can access /admin/dashboard.
+        
+        const dashRes = await fetch('/dashboard');
+        if (dashRes.ok) {
+          userRole = 'customer';
+          currentView = 'customer-dashboard';
+        } else {
+          const adminRes = await fetch('/admin/dashboard');
+          if (adminRes.ok) {
+            userRole = 'administrator';
+            currentView = 'admin-dashboard';
+          } else {
+            currentView = 'login';
+          }
+        }
+      } else {
+        // Not authenticated
+        currentView = 'login';
+      }
+    } catch (err) {
+      console.error(err);
+      currentView = 'login';
+    } finally {
+      verifyingSession = false;
+    }
+  }
+
+  onMount(() => {
+    checkSession();
+  });
+
+  function handleLoginSuccess(role, id) {
+    userRole = role;
+    userId = id;
+    if (role === 'administrator') {
+      currentView = 'admin-dashboard';
+    } else {
+      currentView = 'customer-dashboard';
+    }
+  }
+
+  function handleLogout() {
+    userRole = '';
+    userId = null;
+    currentView = 'login';
+  }
+
+  function navigate(view) {
+    currentView = view;
+  }
 </script>
 
-<section id="center">
-  <div class="hero">
-    <img src={heroImg} class="base" width="170" height="179" alt="" />
-    <img src={svelteLogo} class="framework" alt="Svelte logo" />
-    <img src={viteLogo} class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/App.svelte</code> and save to test <code>HMR</code></p>
-  </div>
-  <Counter />
-</section>
-
-<div class="ticks"></div>
-
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#documentation-icon"></use>
-    </svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank" rel="noreferrer">
-          <img class="logo" src={viteLogo} alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://svelte.dev/" target="_blank" rel="noreferrer">
-          <img class="button-icon" src={svelteLogo} alt="" />
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true">
-      <use href="/icons.svg#social-icon"></use>
-    </svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li>
-        <a href="https://github.com/vitejs/vite" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#github-icon"></use>
-          </svg>
-          GitHub
-        </a>
-      </li>
-      <li>
-        <a href="https://chat.vite.dev/" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#discord-icon"></use>
-          </svg>
-          Discord
-        </a>
-      </li>
-      <li>
-        <a href="https://x.com/vite_js" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#x-icon"></use>
-          </svg>
-          X.com
-        </a>
-      </li>
-      <li>
-        <a href="https://bsky.app/profile/vite.dev" target="_blank" rel="noreferrer">
-          <svg class="button-icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#bluesky-icon"></use>
-          </svg>
-          Bluesky
-        </a>
-      </li>
-    </ul>
-  </div>
-</section>
-
-<div class="ticks"></div>
-<section id="spacer"></section>
+<main class="app-canvas min-h-screen">
+  {#if verifyingSession}
+    <div class="flex items-center justify-center min-h-screen">
+      <div class="text-white font-bold animate-pulse">Verifying secure session...</div>
+    </div>
+  {:else}
+    {#if currentView === 'login'}
+      <LoginView onLoginSuccess={handleLoginSuccess} {navigate} />
+    {:else if currentView === 'register'}
+      <RegisterView {navigate} />
+    {:else if currentView === 'verify-msisdn'}
+      <VerifyMsisdnView {navigate} />
+    {:else if currentView === 'customer-dashboard'}
+      <CustomerDashboard onLogout={handleLogout} />
+    {:else if currentView === 'admin-dashboard'}
+      <AdminDashboard onLogout={handleLogout} />
+    {/if}
+  {/if}
+</main>
