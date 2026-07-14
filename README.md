@@ -103,7 +103,33 @@ podman build -t localhost/smscsim-fixed .
 
 ### SMPP Flow
 
-<img src="assets/smpp-flow.svg" alt="SMPP Flow Diagram" width="100%" max-width="900px"/>
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as App (SmppSessionManager)
+    participant SMSC as smscsim (localhost:2776)
+    participant DB as NeonDB
+
+    App->>SMSC: BIND_TRX
+    SMSC-->>App: BIND_TRX_RESP (ok)
+
+    rect rgb(200, 240, 200)
+    Note over App,SMSC: MT (Outbound)
+    App->>SMSC: SUBMIT_SM (recipient, message)
+    SMSC-->>App: SUBMIT_SM_RESP + msg_id
+    SMSC-->>App: DELIVER_SM (DLR, esm_class=4, ~2s later)
+    Note over App: parse DeliveryReceipt(id, status)<br/>updateSmsStatusByProviderRefId()
+    App->>DB: UPDATE sms_history SET status=DELIVRD
+    end
+
+    rect rgb(240, 220, 200)
+    Note over SMSC: MO (Inbound)
+    SMSC->>App: DELIVER_SM (sender, recipient, message)
+    Note over App: decodeShortMessage(ucs2→utf16)<br/>findUserIdByPhone(recipient)<br/>saveInboundSms()
+    App->>DB: INSERT INTO sms_history (direction='inbound')
+    App-->>SMSC: DELIVER_SM_RESP
+    end
+```
 
 ### DLR (Delivery Receipts)
 
@@ -111,7 +137,26 @@ Returned ~2s after SUBMIT_SM when `registered_delivery=1`. jsmpp `DeliveryReceip
 
 ## Inbound SMS Flow (Twilio)
 
-<img src="assets/inbound-sms-flow.svg" alt="Twilio Inbound SMS Flow Diagram" width="100%" max-width="850px"/>
+```mermaid
+sequenceDiagram
+    autonumber
+    actor ExternalUser as External Sender
+    participant Twilio as Twilio Gateway
+    participant Webhook as TwilioWebhookServlet (/webhook/sms)
+    participant DB as PostgreSQL Database
+    participant Svelte as Svelte Chat Interface
+
+    ExternalUser->>Twilio: Sends SMS to Customer's Twilio Number
+    Twilio->>Webhook: Dispatches POST Callback (From, To, Body)
+    Note over Webhook: Normalize phone numbers.<br/>Match Twilio number to customer user ID.
+    Webhook->>DB: INSERT INTO sms_history (direction='inbound')
+    DB-->>Webhook: Return generated ID
+    Webhook-->>Twilio: Return valid empty Twilio XML <Response/>
+    Note over Svelte: Customer dashboard reloads data asynchronously.<br/>The new bubble slides in on the left!
+    Svelte->>Webhook: fetch(/dashboard)
+    Webhook->>DB: SELECT inbound messages
+    DB-->>Svelte: Return updated chat history JSON
+```
 
 ### Sending MO via Web UI
 
