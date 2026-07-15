@@ -66,7 +66,12 @@ public class AdminCustomerServlet extends HttpServlet {
         if ("delete".equals(action)) {
             try {
                 int id = Integer.parseInt(idStr.trim());
-                UserRepository.deleteUserById(id);
+                int deleted = UserRepository.deleteUserById(id);
+                if (deleted == 0) {
+                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    response.getWriter().write("{\"status\":\"error\",\"message\":\"User not found\"}");
+                    return;
+                }
                 response.getWriter().write("{\"status\":\"success\"}");
             } catch (Exception e) {
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -125,7 +130,12 @@ public class AdminCustomerServlet extends HttpServlet {
                     response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid customer ID\"}");
                     return;
                 }
-                UserRepository.deleteUserById(id);
+                int deleted = UserRepository.deleteUserById(id);
+                if (deleted == 0) {
+                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    response.getWriter().write("{\"status\":\"error\",\"message\":\"User not found\"}");
+                    return;
+                }
                 response.getWriter().write("{\"status\":\"success\"}");
                 return;
             }
@@ -196,12 +206,12 @@ public class AdminCustomerServlet extends HttpServlet {
                 }
                 
                 Map<String, String> profile = new HashMap<>();
-                profile.put("fullName", fullName);
-                profile.put("birthday", birthdayRaw);
-                profile.put("msisdn", msisdn);
-                profile.put("job", job);
-                profile.put("email", email);
-                profile.put("address", address);
+                if (!fullName.isEmpty()) profile.put("fullName", fullName);
+                if (!birthdayRaw.isEmpty()) profile.put("birthday", birthdayRaw);
+                if (!msisdn.isEmpty()) profile.put("msisdn", msisdn);
+                if (!job.isEmpty()) profile.put("job", job);
+                if (!email.isEmpty()) profile.put("email", email);
+                if (!address.isEmpty()) profile.put("address", address);
                 if (!twilioSid.isEmpty()) {
                     profile.put("twilioSid", twilioSid);
                 }

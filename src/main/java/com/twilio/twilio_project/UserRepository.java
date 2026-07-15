@@ -148,13 +148,13 @@ public final class UserRepository {
     /**
      * Deletes a specific SMS record. Secures the delete by verifying the user owns the record!
      */
-    public static void deleteSmsByIdAndUserId(int smsId, int userId) throws SQLException {
+    public static int deleteSmsByIdAndUserId(int smsId, int userId) throws SQLException {
         String sql = "DELETE FROM sms_history WHERE id = ? AND user_id = ?";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, smsId);
             stmt.setInt(2, userId);
-            stmt.executeUpdate();
+            return stmt.executeUpdate();
         }
     }
 
@@ -354,12 +354,12 @@ public final class UserRepository {
     /**
      * Deletes a customer account by their unique database ID.
      */
-    public static void deleteUserById(int userId) throws SQLException {
+    public static int deleteUserById(int userId) throws SQLException {
         String sql = "DELETE FROM users WHERE id = ?";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
-            stmt.executeUpdate();
+            return stmt.executeUpdate();
         }
     }
 

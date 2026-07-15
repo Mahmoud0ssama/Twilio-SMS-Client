@@ -45,13 +45,18 @@ public class VerifyMsisdnServlet extends HttpServlet {
                 String smsBody = "Your new Twilio SMS verification code is: " + newCode;
 
                 // Send PIN
-                TwilioSmsService.send(
-                        pending.getTwilioAccountSid(),
-                        pending.getTwilioAuthToken(),
-                        pending.getTwilioSenderId(),
-                        pending.getMsisdn(),
-                        smsBody
-                );
+                String devBypass = System.getenv("DEV_BYPASS_SMS");
+                if ("true".equalsIgnoreCase(devBypass)) {
+                    System.out.println("DEV_BYPASS_SMS: new verification code is " + newCode);
+                } else {
+                    TwilioSmsService.send(
+                            pending.getTwilioAccountSid(),
+                            pending.getTwilioAuthToken(),
+                            pending.getTwilioSenderId(),
+                            pending.getMsisdn(),
+                            smsBody
+                    );
+                }
 
                 // Update Session state variables reactively
                 pending.setVerificationCode(newCode);

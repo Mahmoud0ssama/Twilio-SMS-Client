@@ -42,7 +42,12 @@ public class DeleteSmsServlet extends HttpServlet {
                 return;
             }
 
-            UserRepository.deleteSmsByIdAndUserId(smsId, userId);
+            int deleted = UserRepository.deleteSmsByIdAndUserId(smsId, userId);
+            if (deleted == 0) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                response.getWriter().write("{\"status\":\"error\",\"message\":\"SMS record not found\"}");
+                return;
+            }
             response.getWriter().write("{\"status\":\"success\"}");
 
         } catch (Exception e) {
