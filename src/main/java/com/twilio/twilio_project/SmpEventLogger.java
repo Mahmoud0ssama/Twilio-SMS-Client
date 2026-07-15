@@ -1,10 +1,13 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // SMPP event ring buffer — connect/disconnect/error logs for admin console
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// In-memory bounded ring buffer for SMPP session events.
+// Avoids needing an external log aggregator — admin reads these via /admin/smpp-logs.
+// synchronizedList for thread-safe concurrent writes from SmppSessionManager callbacks.
 public final class SmpEventLogger {
     private static final int MAX_ENTRIES = 500;
     private static final List<LogEntry> buffer = Collections.synchronizedList(new ArrayList<>());

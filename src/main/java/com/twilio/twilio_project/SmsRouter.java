@@ -1,9 +1,12 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // SMS router — picks SMPP or Twilio provider per user config, sends, logs
 
 import com.twilio.Twilio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// Routes outbound SMS through the user's configured provider (SMPP / Twilio / AUTO).
+// Provider resolution: user's smsProvider column → EnvLoader fallback.
+// AUTO mode tries SMPP first, falls back to Twilio on failure.
 public class SmsRouter {
     private static final Logger log = LoggerFactory.getLogger(SmsRouter.class);
     private static final TwilioSmsProvider twilio = new TwilioSmsProvider();
@@ -23,6 +26,7 @@ public class SmsRouter {
                 }
                 return sendSmpp(smpp, to, message);
 
+            // AUTO: prefer SMPP, fall back to Twilio if SMPP fails
             case "AUTO":
                 if (smppConfigured) {
                     SmsResult result = sendSmpp(smpp, to, message);
@@ -36,6 +40,7 @@ public class SmsRouter {
         }
     }
 
+    // Load SMPP config from user's DB fields, fall back to EnvLoader (global defaults).
     private static SmppConfig resolveSmppConfig(int userId) {
         String host = UserRepository.findSmppConfig(userId, "smpp_host");
         String port = UserRepository.findSmppConfig(userId, "smpp_port");
@@ -73,6 +78,7 @@ public class SmsRouter {
         return smpp.send(to, message, cfg.addressRange);
     }
 
+    // Initialize Twilio with user's credentials, then delegate to TwilioSmsProvider.
     private static SmsResult sendTwilioWithUserCreds(String to, String message, int userId) {
         try {
             CustomerTwilioConfig cfg = UserRepository.findTwilioConfigByUserId(userId);

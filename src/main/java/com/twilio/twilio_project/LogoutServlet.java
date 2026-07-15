@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Logout — invalidate session
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
+// GET /logout — terminates the server-side session. Separate endpoint for clean SPA routing (no form POST).
 @WebServlet(name = "logoutServlet", value = "/logout")
 public class LogoutServlet extends HttpServlet {
     @Override
@@ -15,7 +16,7 @@ public class LogoutServlet extends HttpServlet {
             throws ServletException, IOException {
         HttpSession session = request.getSession(false);
         if (session != null) {
-            session.invalidate(); // Wipes current RAM memory allocation immediately!
+            session.invalidate();
         }
         response.setContentType("application/json");
         response.getWriter().write("{\"status\":\"success\"}");

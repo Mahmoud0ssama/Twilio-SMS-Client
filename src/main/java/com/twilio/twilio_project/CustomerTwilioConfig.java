@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Model — per-customer Twilio credentials stored in DB
 
 public class CustomerTwilioConfig {
 

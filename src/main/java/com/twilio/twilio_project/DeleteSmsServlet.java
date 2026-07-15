@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Delete SMS record — user deletes own SMS history entry
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -11,6 +11,9 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
 
+// POST /delete-sms — deletes an SMS record owned by the current user.
+// The WHERE clause includes user_id to prevent deleting other users' records.
+// Returns 404 if no matching record found (defense against silently ignoring bad IDs).
 @WebServlet(name = "deleteSmsServlet", value = "/delete-sms")
 public class DeleteSmsServlet extends HttpServlet {
 

@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Twilio webhook receiver — handles inbound SMS delivery receipts
 
 import com.twilio.security.RequestValidator;
 import jakarta.servlet.ServletException;

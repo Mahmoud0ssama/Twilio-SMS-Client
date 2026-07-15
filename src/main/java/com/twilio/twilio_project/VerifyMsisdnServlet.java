@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // OTP verification — validate code, resend code, finalize registration
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -11,6 +11,9 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
 
+// POST /verify-msisdn — completes the two-step registration flow.
+// Reads PendingRegistration from session, checks code validity and expiry.
+// ?action=resend generates a new code and re-sends via SMS (or dev bypass).
 @WebServlet(name = "verifyMsisdnServlet", value = "/verify-msisdn")
 public class VerifyMsisdnServlet extends HttpServlet {
 
@@ -37,14 +40,13 @@ public class VerifyMsisdnServlet extends HttpServlet {
             return;
         }
 
-        // Support OTP Resend from Svelte Fetch Request
+        // Handle OTP resend: generate new code, send via SMS, update session
         String action = request.getParameter("action");
         if ("resend".equals(action)) {
             try {
                 String newCode = String.format("%06d", RANDOM.nextInt(1_000_000));
                 String smsBody = "Your new Twilio SMS verification code is: " + newCode;
 
-                // Send PIN
                 String devBypass = System.getenv("DEV_BYPASS_SMS");
                 if ("true".equalsIgnoreCase(devBypass)) {
                     System.out.println("DEV_BYPASS_SMS: new verification code is " + newCode);
@@ -58,7 +60,6 @@ public class VerifyMsisdnServlet extends HttpServlet {
                     );
                 }
 
-                // Update Session state variables reactively
                 pending.setVerificationCode(newCode);
                 pending.setVerificationExpiresAt(System.currentTimeMillis() + VERIFICATION_TTL_MS);
                 session.setAttribute(RegisterServlet.SESSION_PENDING_REGISTRATION, pending);
@@ -72,6 +73,7 @@ public class VerifyMsisdnServlet extends HttpServlet {
             return;
         }
 
+        // Normal verification: check code and expiry, create account on success
         try {
             String body = UserRepository.readRequestBody(request);
             JsonObject json = gson.fromJson(body, JsonObject.class);
@@ -90,7 +92,6 @@ public class VerifyMsisdnServlet extends HttpServlet {
                 return;
             }
 
-            // Create account!
             UserRepository.createCustomer(pending);
             session.removeAttribute(RegisterServlet.SESSION_PENDING_REGISTRATION);
             response.getWriter().write("{\"status\":\"success\"}");

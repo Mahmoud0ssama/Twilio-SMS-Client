@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Internal chat — send messages between users, fetch history
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;

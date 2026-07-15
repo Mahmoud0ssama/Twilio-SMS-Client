@@ -1,5 +1,12 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Model — SMS send result (messageId, success/fail, error detail)
 
+import com.twilio.rest.api.v2010.account.Message;
+
+// Holds the outcome of an SMS send attempt. Three constructor patterns:
+//   SmsResult(String messageId)           — Twilio success (msg has SID)
+//   SmsResult(String messageId, String providerRefId) — SMPP success (msg has provider ref)
+//   SmsResult(boolean success, String error)           — failure
+// providerRefId links delivery receipts (DLRs) back to the original outbound message.
 public class SmsResult {
     private final String messageId;
     private final boolean success;

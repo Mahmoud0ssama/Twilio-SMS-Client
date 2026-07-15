@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Admin log viewer — SMPP session events and errors
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -12,6 +12,8 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.List;
 
+// GET /admin/smpp-logs — returns SMPP session events (BIND, SUBMIT, DLR, MO, ERROR, etc.)
+// from the in-memory ring buffer, newest first. Useful for diagnosing SMSC connectivity issues.
 @WebServlet(name = "adminLogServlet", value = "/admin/smpp-logs")
 public class AdminLogServlet extends HttpServlet {
 

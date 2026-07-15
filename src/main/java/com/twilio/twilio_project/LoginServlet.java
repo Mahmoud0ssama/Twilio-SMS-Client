@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Login — rate-limited (5/60s per IP), sets session for admin or customer
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -15,16 +15,20 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.ConcurrentHashMap;
 
+// POST /login — validates credentials via bcrypt, sets userId/userRole in session.
+// Rate-limited per IP with a sliding window (5 attempts / 60s) using ConcurrentHashMap.
+// The rateLimit map stores [count, windowStart] per IP; compute() is atomic.
 @WebServlet(name = "loginServlet", value = "/login")
 public class LoginServlet extends HttpServlet {
 
     private final Gson gson = new Gson();
 
-    // ponytail: global lock, per-ip locks if throughput matters
     private static final int MAX_ATTEMPTS = 5;
     private static final long WINDOW_MS = 60_000;
     private static final ConcurrentHashMap<String, long[]> rateLimit = new ConcurrentHashMap<>();
 
+    // Sliding-window rate limiter. Atomically increments or resets per IP.
+    // Returns true if count exceeds MAX_ATTEMPTS within the 60s window.
     private boolean isRateLimited(String ip) {
         long now = System.currentTimeMillis();
         long[] entry = rateLimit.compute(ip, (key, val) -> {
@@ -43,6 +47,7 @@ public class LoginServlet extends HttpServlet {
         AuthResult(int id, String role) { this.id = id; this.role = role; }
     }
 
+    // POST /login — authenticate user, set session, return role + userId.
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -93,6 +98,7 @@ public class LoginServlet extends HttpServlet {
         }
     }
 
+    // Direct JDBC query — reads user by username, verifies bcrypt hash.
     private AuthResult validateUser(String username, String password) {
         String sql = "SELECT id, role, password_hash FROM users WHERE username = ?";
         try (Connection conn = DBUtil.getConnection();

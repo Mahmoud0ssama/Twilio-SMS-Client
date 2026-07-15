@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Admin broadcast — send SMS to all customers, push via WebSocket
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;

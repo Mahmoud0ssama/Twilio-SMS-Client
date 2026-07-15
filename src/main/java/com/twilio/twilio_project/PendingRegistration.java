@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Session model — holds incomplete registration data until OTP verified
 
 import java.io.Serializable;
 import java.sql.Date;

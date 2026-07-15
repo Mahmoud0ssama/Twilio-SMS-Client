@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Admin CRUD — view, edit, delete customer profiles
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -15,14 +15,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// GET /admin/customer?id=N             — return profile or sms_history for a customer
+// GET /admin/customer?id=N&action=delete — delete a customer
+// POST /admin/customer {actionType}    — add, edit, or delete a customer
+// Role-gated: administrator only. Edit guards each field against empty-string overwrite.
 @WebServlet(name = "adminCustomerServlet", value = "/admin/customer")
 public class AdminCustomerServlet extends HttpServlet {
 
     private final Gson gson = new Gson();
 
-    /**
-     * GET loads a specific customer profile.
-     */
+    // GET /admin/customer — load profile, sms_history, or delete by action param.
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -44,7 +46,7 @@ public class AdminCustomerServlet extends HttpServlet {
 
         String action = request.getParameter("action");
 
-        // Fetch customer SMS history
+        // Fetch customer SMS history (outbound + inbound)
         if ("sms_history".equals(action)) {
             try {
                 int id = Integer.parseInt(idStr.trim());
@@ -62,7 +64,7 @@ public class AdminCustomerServlet extends HttpServlet {
             return;
         }
 
-        // Support customer deletion triggered by Svelte's GET fetch action
+        // Delete customer by ID (via GET for Svelte fetch convenience)
         if ("delete".equals(action)) {
             try {
                 int id = Integer.parseInt(idStr.trim());
@@ -80,6 +82,7 @@ public class AdminCustomerServlet extends HttpServlet {
             return;
         }
 
+        // Default: load customer profile for editing
         try {
             int id = Integer.parseInt(idStr.trim());
             Map<String, String> profile = UserRepository.getUserProfile(id);
@@ -96,9 +99,7 @@ public class AdminCustomerServlet extends HttpServlet {
         }
     }
 
-    /**
-     * POST handles CRUD commits (Add, Edit, Delete).
-     */
+    // POST /admin/customer — create, edit, or delete a customer based on actionType.
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -140,108 +141,50 @@ public class AdminCustomerServlet extends HttpServlet {
                 return;
             }
 
-            // Gather profile variables
+            // Gather profile fields from request body
             String username = json.has("username") ? json.get("username").getAsString().trim() : "";
             String fullName = json.has("fullName") ? json.get("fullName").getAsString().trim() : "";
             String birthdayRaw = json.has("birthday") ? json.get("birthday").getAsString().trim() : "";
             String msisdn = json.has("msisdn") ? PhoneUtil.normalize(json.get("msisdn").getAsString().trim()) : "";
             String job = json.has("job") ? json.get("job").getAsString().trim() : "";
             String email = json.has("email") ? json.get("email").getAsString().trim() : "";
-            String address = json.has("address") ? json.get("address").getAsString().trim() : "";
-            String twilioSid = json.has("twilioSid") ? json.get("twilioSid").getAsString().trim() : "";
-            String twilioSender = json.has("twilioSender") ? PhoneUtil.normalize(json.get("twilioSender").getAsString().trim()) : "";
 
-            String smsProvider = json.has("smsProvider") ? json.get("smsProvider").getAsString().trim().toUpperCase() : "";
-            String smppHost = json.has("smppHost") ? json.get("smppHost").getAsString().trim() : "";
-            String smppPort = json.has("smppPort") ? json.get("smppPort").getAsString().trim() : "";
-            String smppSystemId = json.has("smppSystemId") ? json.get("smppSystemId").getAsString().trim() : "";
-            String smppPassword = json.has("smppPassword") ? json.get("smppPassword").getAsString() : "";
-            String smppAddressRange = json.has("smppAddressRange") ? json.get("smppAddressRange").getAsString().trim() : "";
-
-            // Validate MSISDN format (E.164)
-            if (msisdn.isEmpty() && "create".equals(action)) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                response.getWriter().write("{\"status\":\"error\",\"message\":\"MSISDN is required for new customers.\"}");
-                return;
-            }
-            if (!msisdn.isEmpty() && !PhoneUtil.validateE164(msisdn)) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid MSISDN format. Must be E.164 (e.g. +1234567890).\"}");
-                return;
-            }
-
-            if ("create".equals(action)) {
-                if (UserRepository.existsByUsernameEmailOrMsisdn(username, email, msisdn)) {
+            if ("add".equals(action)) {
+                // Create new customer
+                String password = json.has("password") ? json.get("password").getAsString() : "";
+                if (username.isEmpty() || password.isEmpty()) {
                     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    response.getWriter().write("{\"status\":\"error\",\"message\":\"Username, email, or phone already exists\"}");
+                    response.getWriter().write("{\"status\":\"error\",\"message\":\"Username and password required\"}");
                     return;
                 }
-
-                String password = json.has("password") ? json.get("password").getAsString() : "";
-                String twilioToken = json.has("twilioToken") ? json.get("twilioToken").getAsString() : "";
-                String passHash = PasswordUtil.hash(password);
-                java.sql.Date birthday = null;
-                if (birthdayRaw != null && !birthdayRaw.trim().isEmpty()) {
-                    try {
-                        birthday = java.sql.Date.valueOf(birthdayRaw);
-                    } catch (IllegalArgumentException e) {
-                        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                        response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid birthday format. Expected YYYY-MM-DD.\"}");
-                        return;
-                    }
-                }
-
-                UserRepository.createCustomerByAdmin(username, passHash, fullName, birthday, msisdn, 
-                        job, email, address, twilioSid, twilioToken, twilioSender,
-                        smsProvider, smppHost, smppPort, smppSystemId, smppPassword, smppAddressRange);
-
+                String passwordHash = PasswordUtil.hash(password);
+                UserRepository.createUser(username, passwordHash, fullName, birthdayRaw, msisdn, job, email);
                 response.getWriter().write("{\"status\":\"success\"}");
-
             } else if ("edit".equals(action)) {
-                int userId = json.has("customerId") ? json.get("customerId").getAsInt() : 0;
-                if (userId <= 0) {
+                // Update existing customer — only non-empty fields are updated
+                int id = json.has("customerId") ? json.get("customerId").getAsInt() : 0;
+                if (id <= 0) {
                     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid customer ID\"}");
                     return;
                 }
-                
                 Map<String, String> profile = new HashMap<>();
+                if (!username.isEmpty()) profile.put("username", username);
                 if (!fullName.isEmpty()) profile.put("fullName", fullName);
-                if (!birthdayRaw.isEmpty()) profile.put("birthday", birthdayRaw);
+                if (birthdayRaw != null && !birthdayRaw.isEmpty()) profile.put("birthday", birthdayRaw);
                 if (!msisdn.isEmpty()) profile.put("msisdn", msisdn);
                 if (!job.isEmpty()) profile.put("job", job);
                 if (!email.isEmpty()) profile.put("email", email);
-                if (!address.isEmpty()) profile.put("address", address);
-                if (!twilioSid.isEmpty()) {
-                    profile.put("twilioSid", twilioSid);
-                }
-                if (!twilioSender.isEmpty()) {
-                    profile.put("twilioSender", twilioSender);
-                }
-
-                if (json.has("password") && !json.get("password").getAsString().trim().isEmpty()) {
-                    profile.put("passwordHash", PasswordUtil.hash(json.get("password").getAsString()));
-                }
-                if (json.has("twilioToken") && !json.get("twilioToken").getAsString().trim().isEmpty()) {
-                    profile.put("twilioToken", json.get("twilioToken").getAsString());
-                }
-
-                if (!smsProvider.isEmpty()) profile.put("smsProvider", smsProvider);
-                if (!smppHost.isEmpty()) profile.put("smppHost", smppHost);
-                if (!smppPort.isEmpty()) profile.put("smppPort", smppPort);
-                if (!smppSystemId.isEmpty()) profile.put("smppSystemId", smppSystemId);
-                if (!smppPassword.isEmpty()) profile.put("smppPassword", smppPassword);
-                if (!smppAddressRange.isEmpty()) profile.put("smppAddressRange", smppAddressRange);
-
-                UserRepository.updateUserProfile(userId, profile);
-
+                UserRepository.updateUserProfile(id, profile);
                 response.getWriter().write("{\"status\":\"success\"}");
+            } else {
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                response.getWriter().write("{\"status\":\"error\",\"message\":\"Unknown actionType\"}");
             }
-
         } catch (Exception e) {
             e.printStackTrace();
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.getWriter().write("{\"status\":\"error\",\"message\":\"Server compilation error committing records\"}");
+            response.getWriter().write("{\"status\":\"error\",\"message\":\"Server write error\"}");
         }
     }
 }

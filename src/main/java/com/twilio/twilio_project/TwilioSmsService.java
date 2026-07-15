@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Twilio SMS sender — sends via Twilio REST API with user-scoped credentials
 
 import com.twilio.Twilio;
 import com.twilio.rest.api.v2010.account.Message;

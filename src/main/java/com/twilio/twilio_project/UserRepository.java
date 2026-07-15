@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // DB queries — users, SMS history, chat, customer Twilio config, stats
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,15 +9,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+// Static DAO layer. Every public method maps to one SQL operation.
+// All connections come from DBUtil (HikariCP pool). Methods are grouped:
+//   - Auth / registration (existsByUsernameEmailOrMsisdn, createCustomer, createUser)
+//   - Profile CRUD (getUserProfile, updateUserProfile)
+//   - SMS history (recordSms, findSmsHistory, findInboundSms, deleteSms, saveInboundSms)
+//   - SMS provider config (findSmsProvider, findSmppConfig)
+//   - Internal chat (insertInternalMessage, getInternalMessages, markInternalRead, etc.)
+//   - System broadcast (insertSystemMessage, getSystemMessages, markSystemRead)
+//   - Admin (findAllCustomers, getCustomerSmsStats, deleteUserById, createCustomerByAdmin)
 public final class UserRepository {
 
-    // Private constructor prevents instantiation (static utility class pattern)
-    private UserRepository() {
-    }
+    private UserRepository() {}
 
-    /**
-     * Reads the raw body of an HTTP request as a string.
-     */
+    // Reads full HTTP request body as String. Used by all POST handlers.
     public static String readRequestBody(jakarta.servlet.http.HttpServletRequest request) throws java.io.IOException {
         StringBuilder sb = new StringBuilder();
         String line;
@@ -29,10 +34,7 @@ public final class UserRepository {
         return sb.toString();
     }
 
-    /**
-     * Checks if a user already exists with the given username, email, or phone number.
-     * Prevents duplicate registration.
-     */
+    // Duplicate check for registration — username, email, or MSISDN already taken
     public static boolean existsByUsernameEmailOrMsisdn(String username, String email, String msisdn)
             throws SQLException {
         String sql = "SELECT 1 FROM users WHERE username = ? OR email = ? OR msisdn = ? LIMIT 1";
@@ -42,14 +44,12 @@ public final class UserRepository {
             stmt.setString(2, email);
             stmt.setString(3, msisdn);
             try (ResultSet rs = stmt.executeQuery()) {
-                return rs.next(); // Returns true if a record exists
+                return rs.next();
             }
         }
     }
 
-    /**
-     * Loads the Twilio credentials associated with a specific customer.
-     */
+    // Load Twilio credentials for a specific user (used by SmsRouter)
     public static CustomerTwilioConfig findTwilioConfigByUserId(int userId) throws SQLException {
         String sql = "SELECT twilio_account_sid, twilio_auth_token, twilio_sender_id FROM users WHERE id = ?";
         try (Connection conn = DBUtil.getConnection();
@@ -67,9 +67,7 @@ public final class UserRepository {
         return null;
     }
 
-    /**
-     * Inserts a new Customer account into the database upon successful registration.
-     */
+    // Finalize registration: insert user row with all fields from PendingRegistration
     public static void createCustomer(PendingRegistration pending) throws SQLException {
         String sql = "INSERT INTO users (username, password_hash, role, full_name, birthday, msisdn, job, email, "
                 + "address, twilio_account_sid, twilio_auth_token, twilio_sender_id, msisdn_validated) "
@@ -92,9 +90,7 @@ public final class UserRepository {
         }
     }
 
-    /**
-     * Loads outbound SMS history for a specific customer, sorted descending by date.
-     */
+    // Outbound SMS history for a user, newest first
     public static List<Map<String, Object>> findSmsHistoryByUserId(int userId) {
         List<Map<String, Object>> history = new ArrayList<>();
         String sql = "SELECT id, from_phone, to_phone, message, status, sent_at FROM sms_history "
@@ -121,9 +117,7 @@ public final class UserRepository {
         return history;
     }
 
-    /**
-     * Saves a newly sent SMS into the database.
-     */
+    // Record an SMS send attempt in history
     public static void recordSms(int userId, String fromPhone, String toPhone, String message, String status)
             throws SQLException {
         recordSms(userId, fromPhone, toPhone, message, status, null);
@@ -145,9 +139,7 @@ public final class UserRepository {
         }
     }
 
-    /**
-     * Deletes a specific SMS record. Secures the delete by verifying the user owns the record!
-     */
+    // Secured delete: WHERE includes user_id so users can only delete their own records
     public static int deleteSmsByIdAndUserId(int smsId, int userId) throws SQLException {
         String sql = "DELETE FROM sms_history WHERE id = ? AND user_id = ?";
         try (Connection conn = DBUtil.getConnection();
@@ -158,6 +150,7 @@ public final class UserRepository {
         }
     }
 
+    // Save inbound (received) SMS from either SMPP MO or Twilio webhook
     public static void saveInboundSms(int userId, String from, String to, String message) throws SQLException {
         String sql = "INSERT INTO sms_history (user_id, from_phone, to_phone, message, status, direction) "
                 + "VALUES (?, ?, ?, ?, 'delivered'::message_status, 'inbound'::sms_direction)";
@@ -171,6 +164,7 @@ public final class UserRepository {
         }
     }
 
+    // Update SMS status when a delivery receipt (DLR) arrives from the SMSC
     public static void updateSmsStatusByProviderRefId(String providerRefId, String status) throws SQLException {
         String mapped = mapSmppStatus(status);
         String sql = "UPDATE sms_history SET status = ?::message_status WHERE provider_ref_id = ?";
@@ -182,6 +176,7 @@ public final class UserRepository {
         }
     }
 
+    // Normalize SMPP DLR status codes to our enum (delivered / failed)
     private static String mapSmppStatus(String smppStatus) {
         if (smppStatus == null) return "delivered";
         return switch (smppStatus.toUpperCase()) {
@@ -191,6 +186,7 @@ public final class UserRepository {
         };
     }
 
+    // Find user by MSISDN (for routing inbound SMS)
     public static int findUserIdByPhone(String phone) throws SQLException {
         String sql = "SELECT id FROM users WHERE msisdn = ? LIMIT 1";
         try (Connection conn = DBUtil.getConnection();
@@ -203,9 +199,7 @@ public final class UserRepository {
         return -1;
     }
 
-    /**
-     * Loads the profile details of an authenticated user.
-     */
+    // Full profile for dashboard / admin editing. Includes Twilio + SMPP config fields.
     public static Map<String, String> getUserProfile(int userId) throws SQLException {
         String sql = "SELECT username, full_name, birthday, msisdn, job, email, address, "
                    + "twilio_account_sid, twilio_sender_id, role, "
@@ -228,7 +222,7 @@ public final class UserRepository {
                     profile.put("address", rs.getString("address"));
                     profile.put("twilioSid", rs.getString("twilio_account_sid"));
                     profile.put("twilioSender", rs.getString("twilio_sender_id"));
-                    profile.put("twilioSenderId", rs.getString("twilio_sender_id")); // Redundant bridge key to support frontend 'twilioSenderId' property!
+                    profile.put("twilioSenderId", rs.getString("twilio_sender_id")); // Redundant bridge key for frontend
                     profile.put("role", rs.getString("role"));
                     profile.put("smsProvider", rs.getString("sms_provider"));
                     profile.put("smppHost", rs.getString("smpp_host"));
@@ -245,9 +239,7 @@ public final class UserRepository {
         return null;
     }
 
-    /**
-     * Updates profile values inside the database.
-     */
+    // Dynamic UPDATE — only sets columns present in the profile map
     public static void updateUserProfile(int userId, Map<String, String> profile) throws SQLException {
         StringBuilder sql = new StringBuilder("UPDATE users SET ");
         List<Object> params = new ArrayList<>();
@@ -326,9 +318,7 @@ public final class UserRepository {
         }
     }
 
-    /**
-     * Retrieves all customer users from the database (excluding administrators).
-     */
+    // All customers for admin dashboard (excludes admins)
     public static List<Map<String, Object>> findAllCustomers() throws SQLException {
         List<Map<String, Object>> customers = new ArrayList<>();
         String sql = "SELECT id, username, full_name, msisdn, email, job, created_at " +
@@ -351,9 +341,7 @@ public final class UserRepository {
         return customers;
     }
 
-    /**
-     * Deletes a customer account by their unique database ID.
-     */
+    // Delete a user by ID. Returns number of rows deleted (0 if not found).
     public static int deleteUserById(int userId) throws SQLException {
         String sql = "DELETE FROM users WHERE id = ?";
         try (Connection conn = DBUtil.getConnection();
@@ -363,9 +351,7 @@ public final class UserRepository {
         }
     }
 
-    /**
-     * Fetches analytical SMS statistics for all customers.
-     */
+    // Per-user SMS send counts for admin analytics
     public static List<Map<String, Object>> getCustomerSmsStats() throws SQLException {
         List<Map<String, Object>> stats = new ArrayList<>();
         String sql = "SELECT u.id, u.username, u.full_name, COUNT(s.id) AS sent_count " +
@@ -389,9 +375,25 @@ public final class UserRepository {
         return stats;
     }
 
-    /**
-     * Admin capability to create a Customer account directly.
-     */
+    // Simple admin create-user with basic fields (used by AdminCustomerServlet "add" action)
+    public static void createUser(String username, String passwordHash, String fullName,
+                                  String birthdayRaw, String msisdn, String job, String email) throws SQLException {
+        String sql = "INSERT INTO users (username, password_hash, role, full_name, birthday, msisdn, job, email, msisdn_validated) "
+                   + "VALUES (?, ?, 'customer'::user_role, ?, ?::date, ?, ?, ?, TRUE)";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, username);
+            stmt.setString(2, passwordHash);
+            stmt.setString(3, fullName);
+            stmt.setString(4, birthdayRaw != null && !birthdayRaw.isEmpty() ? birthdayRaw : null);
+            stmt.setString(5, msisdn);
+            stmt.setString(6, job);
+            stmt.setString(7, email);
+            stmt.executeUpdate();
+        }
+    }
+
+    // Admin creates a customer with full profile (including provider config)
     public static void createCustomerByAdmin(String username, String passwordHash, String fullName, 
                                              java.sql.Date birthday, String msisdn, String job, 
                                              String email, String address, String twilioSid, 
@@ -429,9 +431,7 @@ public final class UserRepository {
         }
     }
 
-    /**
-     * Retrieves all inbound (received) SMS messages for a specific user ID.
-     */
+    // Inbound SMS history for a user, newest first
     public static List<Map<String, Object>> findInboundSmsByUserId(int userId) {
         List<Map<String, Object>> inboundList = new ArrayList<>();
         String sql = "SELECT id, from_phone, to_phone, message, sent_at FROM sms_history " +
@@ -458,6 +458,7 @@ public final class UserRepository {
 
     // ── SMS Provider config ──
 
+    // Read the user's sms_provider setting (SMPP / TWILIO / AUTO)
     public static String findSmsProvider(int userId) {
         String sql = "SELECT sms_provider FROM users WHERE id = ?";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -471,6 +472,7 @@ public final class UserRepository {
         return "TWILIO";
     }
 
+    // Read a single SMPP config field by name (smpp_host, smpp_port, etc.)
     public static String findSmppConfig(int userId, String field) {
         String sql = "SELECT " + field + " FROM users WHERE id = ?";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -486,6 +488,7 @@ public final class UserRepository {
 
     // ── Internal chat ──
 
+    // All users except the caller (for the chat contact list)
     public static List<Map<String, Object>> findAllUsers(int excludeUserId) {
         List<Map<String, Object>> users = new ArrayList<>();
         String sql = "SELECT id, username, full_name, msisdn FROM users WHERE id != ? ORDER BY username";
@@ -507,6 +510,7 @@ public final class UserRepository {
         return users;
     }
 
+    // Save an internal chat message, return the auto-generated ID
     public static int insertInternalMessage(int senderId, int recipientId, String content) throws SQLException {
         String sql = "INSERT INTO internal_messages (sender_id, recipient_id, content) VALUES (?, ?, ?) RETURNING id";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -520,6 +524,7 @@ public final class UserRepository {
         return 0;
     }
 
+    // Chat history between two users, paginated (beforeId cursor)
     public static List<Map<String, Object>> getInternalMessages(int userId1, int userId2, int limit, int beforeId) {
         List<Map<String, Object>> msgs = new ArrayList<>();
         String sql = "SELECT im.id, im.sender_id, im.recipient_id, im.content, im.status, im.created_at, im.read_at, " +
@@ -559,6 +564,7 @@ public final class UserRepository {
         return msgs;
     }
 
+    // Count unread internal messages for a user
     public static int getUnreadInternalCount(int userId) {
         String sql = "SELECT COUNT(*) FROM internal_messages WHERE recipient_id = ? AND read_at IS NULL";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -572,6 +578,7 @@ public final class UserRepository {
         return 0;
     }
 
+    // Mark a specific internal message as read (sets read_at timestamp)
     public static void markInternalRead(int messageId, int userId) {
         String sql = "UPDATE internal_messages SET read_at = NOW() WHERE id = ? AND recipient_id = ? AND read_at IS NULL";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -585,6 +592,7 @@ public final class UserRepository {
 
     // ── System broadcast ──
 
+    // Insert a broadcast/system message, return auto-generated ID
     public static int insertSystemMessage(String content) throws SQLException {
         String sql = "INSERT INTO system_messages (content) VALUES (?) RETURNING id";
         try (Connection conn = DBUtil.getConnection(); PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -596,6 +604,7 @@ public final class UserRepository {
         return 0;
     }
 
+    // System messages for a user, with read tracking via LEFT JOIN
     public static List<Map<String, Object>> getSystemMessages(int userId, int limit) {
         List<Map<String, Object>> msgs = new ArrayList<>();
         String sql = "SELECT sm.id, sm.content, sm.created_at, COALESCE(smr.last_read_id, 0) AS last_read_id " +
@@ -621,6 +630,7 @@ public final class UserRepository {
         return msgs;
     }
 
+    // Count system messages that the user hasn't read yet
     public static int getUnreadSystemCount(int userId) {
         String sql = "SELECT COUNT(*) FROM system_messages sm " +
                      "LEFT JOIN system_message_reads smr ON smr.user_id = ? " +
@@ -636,6 +646,7 @@ public final class UserRepository {
         return 0;
     }
 
+    // Upsert the user's "last read" position for system messages
     public static void markSystemRead(int userId, long lastReadId) {
         String sql = "INSERT INTO system_message_reads (user_id, last_read_id) VALUES (?, ?) " +
                      "ON CONFLICT (user_id) DO UPDATE SET last_read_id = ?";
@@ -649,6 +660,7 @@ public final class UserRepository {
         }
     }
 
+    // All customer IDs (used by broadcast to push to every user)
     public static List<Integer> getAllCustomerUserIds() {
         List<Integer> ids = new ArrayList<>();
         String sql = "SELECT id FROM users WHERE role = 'customer'::user_role";

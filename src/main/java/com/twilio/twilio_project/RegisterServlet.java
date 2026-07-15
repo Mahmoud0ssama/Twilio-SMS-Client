@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Registration — validates input, sends OTP via Twilio (or dev bypass), stores session
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -16,6 +16,9 @@ import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.concurrent.TimeUnit;
 
+// POST /register — accepts user details + Twilio creds, validates uniqueness, sends OTP SMS.
+// Store a PendingRegistration in session (10min TTL) until OTP is verified via /verify-msisdn.
+// DEV_BYPASS_SMS=true env var logs the code to stdout instead of sending via Twilio (dev mode).
 @WebServlet(name = "registerServlet", value = "/register")
 public class RegisterServlet extends HttpServlet {
 
@@ -35,7 +38,7 @@ public class RegisterServlet extends HttpServlet {
             String body = UserRepository.readRequestBody(request);
             JsonObject json = gson.fromJson(body, JsonObject.class);
 
-            // Fetch inputs
+            // Extract all registration fields from JSON body
             String username = json.has("username") ? json.get("username").getAsString().trim() : "";
             String password = json.has("password") ? json.get("password").getAsString() : "";
             String fullName = json.has("fullName") ? json.get("fullName").getAsString().trim() : "";
@@ -66,11 +69,11 @@ public class RegisterServlet extends HttpServlet {
                 return;
             }
 
-            // Generate 6-Digit PIN
+            // Generate 6-digit verification PIN using SecureRandom
             String verificationCode = String.format("%06d", RANDOM.nextInt(1_000_000));
             String smsBody = "Your Twilio SMS verification code is: " + verificationCode;
 
-            // Transmit validation PIN via Svelte credentials
+            // DEV_BYPASS_SMS=true: log code to stdout, skip Twilio API call (for dev without live creds)
             String devBypass = System.getenv("DEV_BYPASS_SMS");
             if ("true".equalsIgnoreCase(devBypass)) {
                 System.out.println("DEV_BYPASS_SMS: verification code for " + username + " is " + verificationCode);
@@ -78,7 +81,7 @@ public class RegisterServlet extends HttpServlet {
                 TwilioSmsService.send(twilioAccountSid, twilioAuthToken, twilioSenderId, msisdn, smsBody);
             }
 
-            // Package Pending Registration
+            // Build pending registration object stored in session
             PendingRegistration pending = new PendingRegistration();
             pending.setUsername(username);
             pending.setPasswordHash(PasswordUtil.hash(password));

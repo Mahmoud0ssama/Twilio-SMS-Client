@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Send SMS — routes through SMPP or Twilio based on provider config
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.sql.SQLException;
 
+// POST /send-sms — compose and send an SMS via the user's configured provider (SMPP/Twilio/AUTO).
+// Normalizes recipient to E.164, delegates to SmsRouter, records result in sms_history.
 @WebServlet(name = "sendSmsServlet", value = "/send-sms")
 public class SendSmsServlet extends HttpServlet {
 
@@ -52,6 +54,7 @@ public class SendSmsServlet extends HttpServlet {
                 return;
             }
 
+            // Determine fromPhone for history (used for display, not routing)
             String fromPhone = "";
             try {
                 CustomerTwilioConfig cfg = UserRepository.findTwilioConfigByUserId(userId);

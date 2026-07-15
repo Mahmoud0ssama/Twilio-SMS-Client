@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // SMPP session pool — connect, bind, send, receive DLRs from SMSC
 
 import org.jsmpp.bean.*;
 import org.jsmpp.extra.ProcessRequestException;
@@ -11,6 +11,10 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.ConcurrentHashMap;
 
+// Manages SMPP sessions to the SMSC (e.g., smscsim). Sessions are pooled by host:port:systemId.
+// Handles: connect/bind, submit, delivery receipts (DLRs), inbound SMS, session reconnection.
+// Each session has a 30s enquire-link timer and 10s transaction timer.
+// Session state listener auto-removes closed sessions from the pool.
 public class SmppSessionManager {
     private static final Logger log = LoggerFactory.getLogger(SmppSessionManager.class);
     private static final ConcurrentHashMap<String, SMPPSession> sessions = new ConcurrentHashMap<>();
@@ -35,29 +39,34 @@ public class SmppSessionManager {
         }
     }
 
+    // Get or create a bound session. Reuses existing sessions if still connected.
     public static synchronized SMPPSession getSession(SmppConfig cfg) throws IOException {
         String key = cfg.key();
         SMPPSession session = sessions.get(key);
         if (session != null && session.getSessionState().isBound()) {
             return session;
         }
+        // Clean up stale session before creating new one
         if (session != null) {
             try { session.unbindAndClose(); } catch (Exception ignored) {}
         }
         session = new SMPPSession();
         session.setEnquireLinkTimer(30000);
         session.setTransactionTimer(10000);
+        // Auto-remove from pool when session closes
         session.addSessionStateListener((newState, oldState, source) -> {
             if (newState.equals(SessionState.CLOSED)) {
                 sessions.remove(key, source);
                 log.warn("SMPP session {} closed, removed from pool", key);
             }
         });
+        // Listen for delivery receipts (DLRs) and inbound mobile-originated messages
         session.setMessageReceiverListener(new MessageReceiverListener() {
             @Override
             public void onAcceptDeliverSm(DeliverSm deliverSm) throws ProcessRequestException {
                 try {
                     byte esmClass = deliverSm.getEsmClass();
+                    // esmClass=4 indicates delivery receipt; otherwise it's an inbound message
                     if (esmClass == 4) {
                         SmpEventLogger.log("INFO", "DLR", "From " + deliverSm.getSourceAddr()
                             + " " + new String(deliverSm.getShortMessage(), java.nio.charset.StandardCharsets.ISO_8859_1));
@@ -92,6 +101,7 @@ public class SmppSessionManager {
         return session;
     }
 
+    // Parse DLR from SMSC, extract providerRefId and final status, update sms_history.
     private static void handleDeliveryReceipt(DeliverSm deliverSm) {
         try {
             String msgStr = new String(deliverSm.getShortMessage(), "UTF-8");
@@ -105,6 +115,7 @@ public class SmppSessionManager {
         }
     }
 
+    // Decode SMPP message based on data coding (0x08 = UTF-16BE, default = UTF-8).
     private static String decodeShortMessage(byte[] msgBytes, byte dataCoding) {
         try {
             return switch (dataCoding) {
@@ -116,6 +127,7 @@ public class SmppSessionManager {
         }
     }
 
+    // Handle mobile-originated (MO) SMS: find user by destination phone, save to sms_history.
     private static void handleInboundMessage(DeliverSm deliverSm) {
         try {
             String from = deliverSm.getSourceAddr();
@@ -134,6 +146,7 @@ public class SmppSessionManager {
         }
     }
 
+    // Submit a short message via the SMPP session. Returns provider message ID for DLR correlation.
     public static String submit(SmppConfig cfg, String to, String message, String from) throws IOException {
         try {
             SMPPSession session = getSession(cfg);
@@ -164,6 +177,7 @@ public class SmppSessionManager {
         }
     }
 
+    // Gracefully close all sessions (used on shutdown).
     public static void closeAll() {
         sessions.forEach((key, session) -> {
             try { session.unbindAndClose(); } catch (Exception ignored) {}

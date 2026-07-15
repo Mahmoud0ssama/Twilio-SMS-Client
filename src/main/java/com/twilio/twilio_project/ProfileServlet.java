@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Customer profile — view & update own details
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -13,6 +13,10 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
+// GET /profile — returns the customer's profile fields as JSON.
+// POST /profile — updates profile fields (only non-empty values overwrite).
+// Sensitive fields (twilioToken, password) are only stored if the input is non-empty,
+// preventing accidental blank overwrite.
 @WebServlet(name = "profileServlet", value = "/profile")
 public class ProfileServlet extends HttpServlet {
 
@@ -77,6 +81,7 @@ public class ProfileServlet extends HttpServlet {
             if (json.has("email")) profile.put("email", json.get("email").getAsString());
             if (json.has("address")) profile.put("address", json.get("address").getAsString());
 
+            // Only update Twilio/Password fields if a non-empty value was sent
             if (json.has("twilioSid") && !json.get("twilioSid").getAsString().trim().isEmpty()) {
                 profile.put("twilioSid", json.get("twilioSid").getAsString().trim());
             }
@@ -91,6 +96,7 @@ public class ProfileServlet extends HttpServlet {
                 profile.put("twilioToken", json.get("twilioToken").getAsString());
             }
 
+            // Provider config fields
             if (json.has("smsProvider")) {
                 profile.put("smsProvider", json.get("smsProvider").getAsString());
             }

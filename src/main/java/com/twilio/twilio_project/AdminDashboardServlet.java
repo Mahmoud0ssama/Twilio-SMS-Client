@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Admin dashboard — customer list, SMS stats, overview
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -13,6 +13,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+// GET /admin/dashboard — returns all customers, per-user SMS stats, and aggregate totals.
+// Role-gated: only administrator role can access.
 @WebServlet(name = "adminDashboardServlet", value = "/admin/dashboard")
 public class AdminDashboardServlet extends HttpServlet {
 

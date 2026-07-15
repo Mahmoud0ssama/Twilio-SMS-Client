@@ -1,4 +1,4 @@
-package com.twilio.twilio_project;
+package com.twilio.twilio_project; // Customer dashboard — profile, SMS history, stats
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -13,6 +13,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+// GET /dashboard — loads the customer's profile, outbound SMS history, and inbound SMS history.
+// Single endpoint used by the SPA to hydrate the dashboard view.
 @WebServlet(name = "dashboardServlet", value = "/dashboard")
 public class DashboardServlet extends HttpServlet {
 
