@@ -4,6 +4,7 @@ services:
     ports:
       - "8080:8080"
     env_file: .env
+    dns: 8.8.8.8
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/"]
