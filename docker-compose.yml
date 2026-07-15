@@ -13,7 +13,7 @@ services:
       start_period: 15s
 
   smscsim:
-    image: localhost/smscsim-fixed:latest
+    image: ukarim/smscsim:latest
     ports:
       - "2776:2775"
       - "12775:12775"
