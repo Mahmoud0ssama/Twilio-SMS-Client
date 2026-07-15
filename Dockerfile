@@ -8,8 +8,8 @@ RUN npm run build
 FROM maven:3-eclipse-temurin-21 AS backend
 WORKDIR /app
 COPY pom.xml .
-COPY src ./src
 RUN mvn dependency:go-offline -B
+COPY src ./src
 COPY --from=frontend /app/src/main/webapp ./src/main/webapp
 RUN mvn package -B -DskipTests
 

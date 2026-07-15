@@ -71,7 +71,12 @@ public class RegisterServlet extends HttpServlet {
             String smsBody = "Your Twilio SMS verification code is: " + verificationCode;
 
             // Transmit validation PIN via Svelte credentials
-            TwilioSmsService.send(twilioAccountSid, twilioAuthToken, twilioSenderId, msisdn, smsBody);
+            String devBypass = System.getenv("DEV_BYPASS_SMS");
+            if ("true".equalsIgnoreCase(devBypass)) {
+                System.out.println("DEV_BYPASS_SMS: verification code for " + username + " is " + verificationCode);
+            } else {
+                TwilioSmsService.send(twilioAccountSid, twilioAuthToken, twilioSenderId, msisdn, smsBody);
+            }
 
             // Package Pending Registration
             PendingRegistration pending = new PendingRegistration();
