@@ -71,7 +71,7 @@
     error = '';
 
     const payload = {
-      actionType: isEditMode ? 'edit' : 'create',
+      actionType: isEditMode ? 'edit' : 'add',
       username: username.trim(),
       fullName: fullName.trim(),
       birthday,

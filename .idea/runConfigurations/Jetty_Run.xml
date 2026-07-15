@@ -25,6 +25,7 @@
           </option>
           <option name="goals">
             <list>
+              <option value="validate" />
               <option value="jetty:run" />
             </list>
           </option>

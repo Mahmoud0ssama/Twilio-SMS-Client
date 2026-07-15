@@ -148,6 +148,16 @@ public class AdminCustomerServlet extends HttpServlet {
             String msisdn = json.has("msisdn") ? PhoneUtil.normalize(json.get("msisdn").getAsString().trim()) : "";
             String job = json.has("job") ? json.get("job").getAsString().trim() : "";
             String email = json.has("email") ? json.get("email").getAsString().trim() : "";
+            String address = json.has("address") ? json.get("address").getAsString().trim() : "";
+            String twilioSid = json.has("twilioSid") ? json.get("twilioSid").getAsString().trim() : "";
+            String twilioToken = json.has("twilioToken") ? json.get("twilioToken").getAsString().trim() : "";
+            String twilioSender = json.has("twilioSender") ? json.get("twilioSender").getAsString().trim() : "";
+            String smsProvider = json.has("smsProvider") ? json.get("smsProvider").getAsString().trim() : "";
+            String smppHost = json.has("smppHost") ? json.get("smppHost").getAsString().trim() : "";
+            String smppPort = json.has("smppPort") ? json.get("smppPort").getAsString().trim() : "";
+            String smppSystemId = json.has("smppSystemId") ? json.get("smppSystemId").getAsString().trim() : "";
+            String smppPassword = json.has("smppPassword") ? json.get("smppPassword").getAsString().trim() : "";
+            String smppAddressRange = json.has("smppAddressRange") ? json.get("smppAddressRange").getAsString().trim() : "";
 
             if ("add".equals(action)) {
                 String password = json.has("password") ? json.get("password").getAsString() : "";
@@ -161,9 +171,10 @@ public class AdminCustomerServlet extends HttpServlet {
                     response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid MSISDN format. Must be E.164 (e.g. +1234567890).\"}");
                     return;
                 }
+                Date birthday = null;
                 if (birthdayRaw != null && !birthdayRaw.isEmpty()) {
                     try {
-                        Date.valueOf(birthdayRaw);
+                        birthday = Date.valueOf(birthdayRaw);
                     } catch (IllegalArgumentException e) {
                         response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                         response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid birthday format. Expected YYYY-MM-DD.\"}");
@@ -176,7 +187,8 @@ public class AdminCustomerServlet extends HttpServlet {
                     return;
                 }
                 String passwordHash = PasswordUtil.hash(password);
-                UserRepository.createUser(username, passwordHash, fullName, birthdayRaw, msisdn, job, email);
+                UserRepository.createCustomerByAdmin(username, passwordHash, fullName, birthday, msisdn, job, email,
+                    address, twilioSid, twilioToken, twilioSender, smsProvider, smppHost, smppPort, smppSystemId, smppPassword, smppAddressRange);
                 response.getWriter().write("{\"status\":\"success\"}");
             } else if ("edit".equals(action)) {
                 // Update existing customer — only non-empty fields are updated
