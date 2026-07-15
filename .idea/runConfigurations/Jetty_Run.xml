@@ -21,7 +21,9 @@
         <MavenRunnerParameters>
           <option name="cmdOptions" />
           <option name="profiles">
-            <set />
+            <set>
+              <option value="dev" />
+            </set>
           </option>
           <option name="goals">
             <list>
