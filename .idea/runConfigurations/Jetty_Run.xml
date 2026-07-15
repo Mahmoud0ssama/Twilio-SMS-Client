@@ -14,7 +14,7 @@
           </option>
           <option name="passParentEnv" value="true" />
           <option name="skipTests" value="true" />
-          <option name="vmOptions" value="" />
+          <option name="vmOptions" value="-Dapp.profile=local" />
         </MavenRunnerSettings>
       </option>
       <option name="myRunnerParameters">
