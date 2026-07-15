@@ -98,7 +98,9 @@ Set `APP_PROFILE=docker` in `.env` for container networking (`smscsim` hostname 
 podman-compose up -d smscsim
 ```
 
-In IntelliJ: **Run → Edit Configurations → + → Maven** → Command line: `jetty:run`. Debug for breakpoints on servlets, SMPP handlers, WebSocket code.
+The project includes `.idea/runConfigurations/Jetty_Run.xml` — open and run it.
+Sets `-Dapp.profile=local` automatically so `.env` stays on `docker` profile.
+Debug for breakpoints on servlets, SMPP handlers, WebSocket code.
 
 ---
 
@@ -119,7 +121,7 @@ curl -s http://localhost:8080/login -X POST \
 | User | Password | Role | Provider |
 |------|----------|------|----------|
 | `admin` | `123456` | administrator | — |
-| `zkhattab` | `kh007` | customer | AUTO (SMPP → localhost:2776) |
+| `zkhattab` | `kh007` | customer | AUTO (SMPP — host/port from EnvLoader, profile-aware) |
 
 ## Features
 
@@ -251,7 +253,7 @@ See [full security model](#security-model).
 
 Each user has a `sms_provider` column: `TWILIO`, `SMPP`, or `AUTO`. Null defaults to `TWILIO`.
 
-- **SMPP** → `SmppSessionManager.submit()` against user's SMPP config (or env fallback)
+- **SMPP** → `SmppSessionManager.submit()` against EnvLoader config (profile-aware, host/port from `LOCAL_`/`DOCKER_` prefix). DB `smpp_host`/`smpp_port` override for per-user SMSC. `system_id`/`password`/`address_range` use DB-first then EnvLoader fallback.
 - **TWILIO** → `TwilioSmsProvider.send()` with user's Twilio creds
 - **AUTO** → try SMPP first, fallback to Twilio on failure
 
@@ -355,6 +357,7 @@ curl -X POST http://localhost:12775/ \
 | `SMPP_ADDRESS_RANGE` | both | optional source address override |
 
 `EnvLoader` resolves `LOCAL_` or `DOCKER_` prefix based on `APP_PROFILE`.
+IntelliJ run config auto-sets `-Dapp.profile=local` — no `.env` swapping needed.
 
 ## Database Migrations (Flyway)
 

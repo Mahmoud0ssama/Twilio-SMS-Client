@@ -127,9 +127,8 @@ Best for: testing the complete deployment, verifying Dockerfile/Docker behavior,
 # 1. Build frontend (compiled assets go to src/main/webapp/)
 cd frontend && npm install && npm run build && cd ..
 
-# 2. Set profile to docker
-sed -i 's/APP_PROFILE=local/APP_PROFILE=docker/' .env
-# Or edit .env manually
+# 2. Set APP_PROFILE=docker in .env for container networking
+#    (EnvLoader uses DOCKER_SMPP_HOST=smscsim / DOCKER_SMPP_PORT=2775)
 
 # 3. Start everything
 podman-compose --env-file .env up -d --build
@@ -153,20 +152,16 @@ podman-compose down
 Best for: step-through debugging, breakpoints, variable inspection.
 
 ```bash
-# Terminal: SMSC simulator
+# Terminal 1: SMSC simulator
 podman-compose up -d smscsim
+
+# Terminal 2: Frontend dev server (optional, hot-reload)
+cd frontend && npm install && npm run dev -- --host
 ```
 
-1. Open project in IntelliJ
-2. **Run → Edit Configurations → + → Maven**
-3. Name: `Jetty`
-4. Command line: `jetty:run`
-5. Working directory: project root
-6. **Run → Edit Configurations → + → npm** (optional, for frontend dev server)
-7. Name: `Frontend Dev`
-8. Script: `dev`
-9. Working directory: `frontend/`
-10. Click **Debug** on the Jetty config → breakpoints work on Java servlets, SMPP handlers, and chat WebSocket code
+The project includes `.idea/runConfigurations/Jetty_Run.xml` — just open and run "Jetty Run".
+It sets `-Dapp.profile=local` automatically so `.env` stays on `docker` for podman-compose.
+Debug for breakpoints on servlets, SMPP handlers, and chat WebSocket code.
 
 ## Database Migrations (Flyway)
 
@@ -325,10 +320,17 @@ Each user has an `sms_provider` column:
 - `SMPP` — always uses SMPP via smscsim (or real SMSC in production)
 - `AUTO` — tries SMPP first; if it fails, falls back to Twilio
 
-Provider config is resolved in order:
-1. User-specific DB columns (`smpp_host`, `smpp_port`, etc.)
-2. Environment variables (`LOCAL_SMPP_*` or `DOCKER_SMPP_*` based on `APP_PROFILE`)
+Provider config is resolved in two groups:
+
+**host/port** (profile-aware, EnvLoader authoritative):
+1. EnvLoader (`LOCAL_SMPP_*` or `DOCKER_SMPP_*` based on `APP_PROFILE`)
+2. User-specific DB columns (`smpp_host`, `smpp_port`) — overrides for custom SMSC
 3. Defaults (localhost:2776)
+
+**system_id/password/address_range** (per-user credentials):
+1. User-specific DB columns
+2. EnvLoader fallback
+3. Defaults
 
 ### smscsim (Local SMSC Simulator)
 
@@ -1013,7 +1015,7 @@ npm run build        # Production build → ../src/main/webapp/
 | Vite dev server | `http://localhost:5173` |
 | JSMPP lib | `3.0.2` (strict C-Octet String length enforcement) |
 | Flyway migrations dir | `src/main/resources/db/migration/` |
-| .env profile flag | `APP_PROFILE=local` or `docker` |
+| .env profile flag | `APP_PROFILE=local` or `docker`. IntelliJ run config auto-sets `-Dapp.profile=local` |
 | Admin login | `admin` / `123456` |
 | User login | `zkhattab` / `kh007` |
 | Wireshark capture file | `/tmp/smpp_capture.pcap` |
