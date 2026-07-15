@@ -1,9 +1,11 @@
 package com.twilio.twilio_project; // DB queries — users, SMS history, chat, customer Twilio config, stats
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -375,17 +377,20 @@ public final class UserRepository {
         return stats;
     }
 
-    // Simple admin create-user with basic fields (used by AdminCustomerServlet "add" action)
     public static void createUser(String username, String passwordHash, String fullName,
                                   String birthdayRaw, String msisdn, String job, String email) throws SQLException {
         String sql = "INSERT INTO users (username, password_hash, role, full_name, birthday, msisdn, job, email, msisdn_validated) "
-                   + "VALUES (?, ?, 'customer'::user_role, ?, ?::date, ?, ?, ?, TRUE)";
+                   + "VALUES (?, ?, 'customer'::user_role, ?, ?, ?, ?, ?, TRUE)";
         try (Connection conn = DBUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.setString(2, passwordHash);
             stmt.setString(3, fullName);
-            stmt.setString(4, birthdayRaw != null && !birthdayRaw.isEmpty() ? birthdayRaw : null);
+            if (birthdayRaw != null && !birthdayRaw.isEmpty()) {
+                stmt.setDate(4, Date.valueOf(birthdayRaw));
+            } else {
+                stmt.setNull(4, Types.DATE);
+            }
             stmt.setString(5, msisdn);
             stmt.setString(6, job);
             stmt.setString(7, email);

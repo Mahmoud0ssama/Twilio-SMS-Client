@@ -150,11 +150,29 @@ public class AdminCustomerServlet extends HttpServlet {
             String email = json.has("email") ? json.get("email").getAsString().trim() : "";
 
             if ("add".equals(action)) {
-                // Create new customer
                 String password = json.has("password") ? json.get("password").getAsString() : "";
                 if (username.isEmpty() || password.isEmpty()) {
                     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     response.getWriter().write("{\"status\":\"error\",\"message\":\"Username and password required\"}");
+                    return;
+                }
+                if (!msisdn.isEmpty() && !PhoneUtil.validateE164(msisdn)) {
+                    response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid MSISDN format. Must be E.164 (e.g. +1234567890).\"}");
+                    return;
+                }
+                if (birthdayRaw != null && !birthdayRaw.isEmpty()) {
+                    try {
+                        Date.valueOf(birthdayRaw);
+                    } catch (IllegalArgumentException e) {
+                        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        response.getWriter().write("{\"status\":\"error\",\"message\":\"Invalid birthday format. Expected YYYY-MM-DD.\"}");
+                        return;
+                    }
+                }
+                if (UserRepository.existsByUsernameEmailOrMsisdn(username, email, msisdn)) {
+                    response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    response.getWriter().write("{\"status\":\"error\",\"message\":\"Username, email, or phone already exists\"}");
                     return;
                 }
                 String passwordHash = PasswordUtil.hash(password);
