@@ -5,6 +5,9 @@ services:
       - "8080:8080"
     env_file: .env
     dns: 8.8.8.8
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/"]

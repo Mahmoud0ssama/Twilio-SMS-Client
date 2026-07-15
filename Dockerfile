@@ -15,7 +15,7 @@ RUN mvn package -B -DskipTests
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl wireshark tshark
 COPY --from=backend /app/target/*.war ./ROOT.war
 ADD https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-runner/11.0.20/jetty-runner-11.0.20.jar /app/jetty-runner.jar
 EXPOSE 8080

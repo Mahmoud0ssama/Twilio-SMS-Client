@@ -150,19 +150,33 @@ public class WiresharkServlet extends HttpServlet {
         Path pcap = PCAP_DIR.resolve(PCAP_FILE);
         Files.deleteIfExists(pcap);
 
-        ProcessBuilder pb = new ProcessBuilder(
-            "sg", "wireshark", "-c",
-            "/usr/bin/dumpcap -i lo -f \"port 8080 or port 2776 or port 12775 or port 5173\" -w " + pcap + " -F pcap"
-        );
-        pb.redirectErrorStream(true);
-        Process proc = pb.start();
-
+        Process proc = startDumpcap(pcap.toString());
         captures.put(PCAP_FILE, new CaptureState(proc));
 
         JsonObject res = new JsonObject();
         res.addProperty("status", "success");
         res.addProperty("message", "Capture started on lo (ports 8080, 2776, 12775, 5173)");
         resp.getWriter().write(gson.toJson(res));
+    }
+
+    // Start dumpcap — try direct (Docker/root), fall back to sg wrapper (host)
+    private Process startDumpcap(String pcapPath) throws IOException {
+        String filter = "port 8080 or port 2776 or port 12775 or port 5173";
+        try {
+            ProcessBuilder direct = new ProcessBuilder(
+                "/usr/bin/dumpcap", "-i", "lo", "-f", filter, "-w", pcapPath, "-F", "pcap"
+            );
+            direct.redirectErrorStream(true);
+            return direct.start();
+        } catch (IOException e) {
+            // sg wrapper for systems with cap_net_admin on dumpcap
+            ProcessBuilder sg = new ProcessBuilder(
+                "sg", "wireshark", "-c",
+                "/usr/bin/dumpcap -i lo -f \"" + filter + "\" -w " + pcapPath + " -F pcap"
+            );
+            sg.redirectErrorStream(true);
+            return sg.start();
+        }
     }
 
     private void handleStop(HttpServletResponse resp) throws IOException {
@@ -336,17 +350,7 @@ public class WiresharkServlet extends HttpServlet {
                 resp.getWriter().write("{\"status\":\"error\",\"message\":\"No DISPLAY set — cannot launch GUI\"}");
                 return;
             }
-            // Use sg to get wireshark group permissions for the capture child.
-            // dumpcap on this system has cap_net_admin,cap_net_raw=eip, so
-            // spawning it under the wireshark group via sg is sufficient.
-            ProcessBuilder pb = new ProcessBuilder(
-                "sg", "wireshark", "-c",
-                "nohup wireshark -i lo -f \"port 8080 or port 2776 or port 12775 or port 5173\" -k > /dev/null 2>&1 &"
-            );
-            pb.redirectErrorStream(true);
-            pb.redirectOutput(ProcessBuilder.Redirect.to(new File("/dev/null")));
-            pb.redirectError(ProcessBuilder.Redirect.to(new File("/dev/null")));
-            pb.start();
+            startWiresharkGui();
 
             JsonObject res = new JsonObject();
             res.addProperty("status", "success");
@@ -358,6 +362,28 @@ public class WiresharkServlet extends HttpServlet {
             err.addProperty("status", "error");
             err.addProperty("message", "Failed to launch Wireshark: " + e.getMessage());
             resp.getWriter().write(gson.toJson(err));
+        }
+    }
+
+    // Launch wireshark GUI — try direct (Docker/root), fall back to sg wrapper (host)
+    private void startWiresharkGui() throws IOException {
+        String filter = "port 8080 or port 2776 or port 12775 or port 5173";
+        try {
+            ProcessBuilder direct = new ProcessBuilder(
+                "nohup", "wireshark", "-i", "lo", "-f", filter, "-k"
+            );
+            direct.redirectOutput(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            direct.redirectError(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            direct.start();
+        } catch (IOException e) {
+            ProcessBuilder sg = new ProcessBuilder(
+                "sg", "wireshark", "-c",
+                "nohup wireshark -i lo -f \"" + filter + "\" -k > /dev/null 2>&1 &"
+            );
+            sg.redirectErrorStream(true);
+            sg.redirectOutput(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            sg.redirectError(ProcessBuilder.Redirect.to(new File("/dev/null")));
+            sg.start();
         }
     }
 
