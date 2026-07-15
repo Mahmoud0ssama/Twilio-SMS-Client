@@ -63,7 +63,7 @@ public class BroadcastServlet extends HttpServlet {
                         Map<String, String> profile = UserRepository.getUserProfile(uid);
                         String phone = profile != null ? profile.get("msisdn") : null;
                         if (phone != null && !phone.isEmpty()) {
-                            SmsRouter.send(phone, content, uid);
+                            SmsRouter.send(phone, content, uid, true);
                         }
                     } catch (Exception ignored) {}
                 }

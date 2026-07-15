@@ -14,12 +14,23 @@ public class SmsRouter {
     private static final TwilioSmsProvider twilio = new TwilioSmsProvider();
 
     public static SmsResult send(String to, String message, int userId) {
-        String provider = UserRepository.findSmsProvider(userId);
-        if (provider == null) provider = "TWILIO";
+        return send(to, message, userId, false);
+    }
 
+    public static SmsResult send(String to, String message, int userId, boolean forceSMPP) {
         SmppConfig smpp = resolveSmppConfig(userId);
         boolean smppConfigured = smpp.host != null && !smpp.host.isEmpty()
                 && smpp.systemId != null && !smpp.systemId.isEmpty();
+
+        if (forceSMPP) {
+            if (!smppConfigured) {
+                return new SmsResult(false, "SMPP not configured for this user");
+            }
+            return sendSmpp(smpp, to, message);
+        }
+
+        String provider = UserRepository.findSmsProvider(userId);
+        if (provider == null) provider = "TWILIO";
 
         switch (provider.toUpperCase()) {
             case "SMPP":
