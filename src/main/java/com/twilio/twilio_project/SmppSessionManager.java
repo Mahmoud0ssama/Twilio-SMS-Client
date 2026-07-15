@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Manages SMPP sessions to the SMSC (e.g., smscsim). Sessions are pooled by host:port:systemId.
+// Manages SMPP sessions to the SMSC (smscsim in docker profile, localhost in local profile). Sessions are pooled by host:port:systemId.
 // Handles: connect/bind, submit, delivery receipts (DLRs), inbound SMS, session reconnection.
 // Each session has a 30s enquire-link timer and 10s transaction timer.
 // Session state listener auto-removes closed sessions from the pool.

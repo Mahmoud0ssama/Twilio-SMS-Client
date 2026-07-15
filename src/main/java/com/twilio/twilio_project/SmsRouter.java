@@ -5,7 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 // Routes outbound SMS through the user's configured provider (SMPP / Twilio / AUTO).
-// Provider resolution: user's smsProvider column → EnvLoader fallback.
+// Two-group SMPP config resolution:
+//   host/port — EnvLoader first (profile-aware: localhost vs smscsim), DB overrides for per-user SMSC
+//   sid/pass/addr — DB first (per-user credentials), EnvLoader fallback
 // AUTO mode tries SMPP first, falls back to Twilio on failure.
 public class SmsRouter {
     private static final Logger log = LoggerFactory.getLogger(SmsRouter.class);
@@ -40,7 +42,9 @@ public class SmsRouter {
         }
     }
 
-    // Load SMPP config from user's DB fields, fall back to EnvLoader (global defaults).
+    // Two-group SMPP config resolution:
+    //   host/port — EnvLoader first (profile-aware, LOCAL_/DOCKER_ prefix), DB overrides for per-user SMSC
+    //   sid/pass/addr — DB first (per-user credentials), EnvLoader fallback
     private static SmppConfig resolveSmppConfig(int userId) {
         // host/port — EnvLoader is authoritative (profile-aware: localhost vs smscsim),
         // DB overrides for per-user SMSC
@@ -59,7 +63,7 @@ public class SmsRouter {
         if (pass == null || pass.isEmpty()) pass = EnvLoader.get("SMPP_PASSWORD");
         if (addr == null || addr.isEmpty()) addr = EnvLoader.get("SMPP_ADDRESS_RANGE");
 
-        return new SmppConfig(host, parseInt(port, 2776), sid, pass, addr);
+        return new SmppConfig(host, parseInt(port, 2776), sid, pass, addr); // default 2776 when EnvLoader/DB null
     }
 
     public static class SmppConfig {

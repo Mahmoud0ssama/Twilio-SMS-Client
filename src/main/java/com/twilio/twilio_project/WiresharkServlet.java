@@ -27,6 +27,8 @@ public class WiresharkServlet extends HttpServlet {
     private static final Path PCAP_DIR = Paths.get("/tmp");
     private static final String PCAP_FILE = "smpp_capture.pcap";
 
+    // Hardcoded port 2776 in tcpdump/wireshark filters below is the default SMPP port for local profile.
+    // If SMPP port becomes dynamically configurable per-profile, these filter strings must be updated.
     private static final ConcurrentHashMap<String, CaptureState> captures = new ConcurrentHashMap<>();
     private static Boolean tsharkAvailable = null;
 
